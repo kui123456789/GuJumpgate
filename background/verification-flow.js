@@ -175,6 +175,22 @@
       }
     }
 
+    function isPasskeyEnrollmentPageUrl(rawUrl) {
+      const url = String(rawUrl || '').trim();
+      if (!url) return false;
+
+      try {
+        const parsed = new URL(url);
+        const host = String(parsed.hostname || '').toLowerCase();
+        if (!['auth.openai.com', 'auth0.openai.com', 'accounts.openai.com'].includes(host)) {
+          return false;
+        }
+        return /\/create-account-enroll-passkey(?:[/?#]|$)/i.test(String(parsed.pathname || ''));
+      } catch {
+        return false;
+      }
+    }
+
     async function detectStep4PostSubmitFallback(tabId, options = {}) {
       const timeoutMs = Math.max(1000, Number(options.timeoutMs) || 8000);
       const pollIntervalMs = Math.max(100, Number(options.pollIntervalMs) || 250);
@@ -203,6 +219,16 @@
             return {
               success: true,
               reason: 'signup_profile',
+              skipProfileStep: false,
+              url: currentUrl,
+            };
+          }
+
+          if (isPasskeyEnrollmentPageUrl(currentUrl)) {
+            return {
+              success: true,
+              reason: 'passkey_enrollment',
+              passkeyEnrollmentRequired: true,
               skipProfileStep: false,
               url: currentUrl,
             };

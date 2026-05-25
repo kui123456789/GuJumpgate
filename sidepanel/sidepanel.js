@@ -1017,6 +1017,7 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
     title: step.title,
     displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
     executeKey: String(step.key || '').trim(),
+    ui: step.ui && typeof step.ui === 'object' ? { ...step.ui } : {},
   })).filter((node) => node.nodeId);
 }
 
@@ -1102,6 +1103,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
       nodeId: String(step.key || step.id || '').trim(),
       title: step.title,
       displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
+      ui: step.ui && typeof step.ui === 'object' ? { ...step.ui } : {},
     }));
   if (typeof workflowNodes !== 'undefined') {
     workflowNodes = nextWorkflowNodes;
@@ -9913,9 +9915,10 @@ function renderStepsList() {
   stepsList.innerHTML = workflowNodes.map((node) => {
     const step = getStepIdByNodeIdForCurrentMode(node.nodeId);
     const nodeId = String(node.nodeId || '').trim();
+    const stepLabel = String(node.ui?.stepLabel || step || node.displayOrder || '').trim();
     return `
     <div class="step-row" data-step="${step}" data-node-id="${escapeHtml(nodeId)}" data-step-key="${escapeHtml(node.executeKey || nodeId)}">
-      <div class="step-indicator" data-step="${step}" data-node-id="${escapeHtml(nodeId)}"><span class="step-num">${step || node.displayOrder || ''}</span></div>
+      <div class="step-indicator" data-step="${step}" data-node-id="${escapeHtml(nodeId)}"><span class="step-num">${escapeHtml(stepLabel)}</span></div>
       <button class="step-btn" data-step="${step}" data-node-id="${escapeHtml(nodeId)}" data-step-key="${escapeHtml(node.executeKey || nodeId)}">${escapeHtml(node.title)}</button>
       <span class="step-status" data-step="${step}" data-node-id="${escapeHtml(nodeId)}"></span>
     </div>

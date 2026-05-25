@@ -11,6 +11,7 @@
   const DEFAULT_SERVICE_CODE = 'openai';
   const DEFAULT_COUNTRY_ID = 'US';
   const DEFAULT_COUNTRY_LABEL = 'United States';
+  const DEFAULT_POOL_ENTRY_MAX_USES = 3;
   const PHONE_CODE_TIMEOUT_ERROR_PREFIX = 'PHONE_CODE_TIMEOUT::';
   const TRUSTED_TEXT_KEYS = new Set([
     'sms',
@@ -146,6 +147,14 @@
     }, {});
   }
 
+  function normalizeHostedSmsPoolEntryMaxUses(value = DEFAULT_POOL_ENTRY_MAX_USES) {
+    const parsed = Math.floor(Number(value));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return DEFAULT_POOL_ENTRY_MAX_USES;
+    }
+    return Math.max(1, parsed);
+  }
+
   function chooseHostedSmsPoolEntry(entries = [], usage = {}, options = {}) {
     const normalizedEntries = Array.isArray(entries) ? entries.filter(Boolean) : [];
     const blockedKeys = new Set([
@@ -153,11 +162,19 @@
       ...(Array.isArray(options.blockedActivationIds) ? options.blockedActivationIds : []),
       ...(Array.isArray(options.blockedHostedSmsPoolKeys) ? options.blockedHostedSmsPoolKeys : []),
     ].map((key) => String(key || '').trim()).filter(Boolean));
-    const candidateEntries = normalizedEntries.filter((entry) => !blockedKeys.has(String(entry?.key || '').trim()));
+    const maxUses = normalizeHostedSmsPoolEntryMaxUses(options.maxUses ?? options.hostedSmsPoolEntryMaxUses);
+    const normalizedUsage = normalizeHostedSmsPoolUsage(usage);
+    const candidateEntries = normalizedEntries.filter((entry) => {
+      const key = String(entry?.key || '').trim();
+      if (!key || blockedKeys.has(key)) {
+        return false;
+      }
+      const useCount = Math.max(0, Math.floor(Number(normalizedUsage[key]?.useCount) || 0));
+      return useCount < maxUses;
+    });
     if (!candidateEntries.length) {
       return null;
     }
-    const normalizedUsage = normalizeHostedSmsPoolUsage(usage);
     return [...candidateEntries].sort((left, right) => {
       const leftUsage = normalizedUsage[left.key] || {};
       const rightUsage = normalizedUsage[right.key] || {};

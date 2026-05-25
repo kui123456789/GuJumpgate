@@ -77,6 +77,7 @@ if (document.documentElement.getAttribute(SIGNUP_PAGE_LISTENER_SENTINEL) !== '1'
 const SIGNUP_PAGE_NODE_HANDLERS = Object.freeze({
   'submit-signup-email': (payload) => step2_clickRegister(payload),
   'fill-password': (payload) => step3_fillEmailPassword(payload),
+  'skip-passkey-enrollment': (payload) => skipPasskeyEnrollmentStep(payload),
   'fill-profile': (payload) => step5_fillNameBirthday(payload),
   'oauth-login': (payload) => step6_login(payload),
   'confirm-oauth': (_payload) => step8_findAndClick(),
@@ -89,6 +90,7 @@ function resolveCommandNodeId(message = {}) {
   }
   const visibleStep = Number(message.payload?.visibleStep || message.step) || 0;
   if (visibleStep === 4) return 'fetch-signup-code';
+  if (visibleStep === 45) return 'skip-passkey-enrollment';
   if (visibleStep === 8 || visibleStep === 11) return 'fetch-login-code';
   if (visibleStep === 9 || visibleStep === 12) return 'post-login-phone-verification';
   if (visibleStep === 10 || visibleStep === 13) return 'confirm-oauth';
@@ -2934,6 +2936,43 @@ function isSignupProfilePageUrl(rawUrl = location.href) {
   }
 }
 
+function isPasskeyEnrollmentPageUrl(rawUrl = location.href) {
+  const url = String(rawUrl || '').trim();
+  if (!url) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const host = String(parsed.hostname || '').toLowerCase();
+    if (!['auth.openai.com', 'auth0.openai.com', 'accounts.openai.com'].includes(host)) {
+      return false;
+    }
+    return /\/create-account-enroll-passkey(?:[/?#]|$)/i.test(String(parsed.pathname || ''));
+  } catch {
+    return false;
+  }
+}
+
+function isPasskeyEnrollmentPage() {
+  if (isPasskeyEnrollmentPageUrl()) {
+    return true;
+  }
+
+  const pageText = getPageTextSnapshot();
+  if (!pageText || !/(?:通行密钥|passkey)/i.test(pageText)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(String(location.href || '').trim());
+    const host = String(parsed.hostname || '').toLowerCase();
+    return ['auth.openai.com', 'auth0.openai.com', 'accounts.openai.com'].includes(host);
+  } catch {
+    return false;
+  }
+}
+
 function isLikelyLoggedInChatgptHomeUrl(rawUrl = location.href) {
   const url = String(rawUrl || '').trim();
   if (!url) {
@@ -3015,6 +3054,14 @@ function getStep4PostVerificationState(options = {}) {
   if (isStep5Ready() || isSignupProfilePageUrl()) {
     return {
       state: 'step5',
+      url: location.href,
+    };
+  }
+
+  if (isPasskeyEnrollmentPage()) {
+    return {
+      state: 'passkey_enrollment',
+      passkeyEnrollmentRequired: true,
       url: location.href,
     };
   }
@@ -4745,6 +4792,14 @@ function inspectSignupVerificationState() {
     };
   }
 
+  if (postVerificationState?.state === 'passkey_enrollment') {
+    return {
+      state: 'passkey_enrollment',
+      passkeyEnrollmentRequired: true,
+      url: postVerificationState.url || location.href,
+    };
+  }
+
   if (isSignupPasswordErrorPage()) {
     const timeoutPage = getSignupPasswordTimeoutErrorPageState();
     return {
@@ -4796,6 +4851,7 @@ async function waitForSignupVerificationTransition(timeout = 5000) {
     if (
       snapshot.state === 'step5'
       || snapshot.state === 'logged_in_home'
+      || snapshot.state === 'passkey_enrollment'
       || snapshot.state === 'verification'
       || snapshot.state === 'error'
       || snapshot.state === 'email_exists'
@@ -4887,6 +4943,17 @@ async function prepareSignupVerificationFlow(payload = {}, timeout = 30000) {
         ready: true,
         alreadyVerified: true,
         skipProfileStep: true,
+        retried: recoveryRound,
+        prepareSource,
+      };
+    }
+
+    if (snapshot.state === 'passkey_enrollment') {
+      log(`${prepareLogLabel}：页面已进入通行密钥创建页，本步骤按已完成处理，后续将执行跳过通行密钥节点。`, 'ok');
+      return {
+        ready: true,
+        alreadyVerified: true,
+        passkeyEnrollmentRequired: true,
         retried: recoveryRound,
         prepareSource,
       };
@@ -5008,6 +5075,13 @@ async function waitForVerificationSubmitOutcome(step, timeout, options = {}) {
       if (postVerificationState?.state === 'step5') {
         return { success: true };
       }
+      if (postVerificationState?.state === 'passkey_enrollment') {
+        return {
+          success: true,
+          passkeyEnrollmentRequired: true,
+          url: postVerificationState.url || location.href,
+        };
+      }
       if (purpose === 'signup' && isEmailVerificationPage()) {
         return {
           success: true,
@@ -5050,6 +5124,13 @@ async function waitForVerificationSubmitOutcome(step, timeout, options = {}) {
     }
     if (postVerificationState?.state === 'step5') {
       return { success: true };
+    }
+    if (postVerificationState?.state === 'passkey_enrollment') {
+      return {
+        success: true,
+        passkeyEnrollmentRequired: true,
+        url: postVerificationState.url || location.href,
+      };
     }
     if (purpose === 'signup' && isEmailVerificationPage()) {
       return {
@@ -6931,7 +7012,193 @@ async function waitForStep5SubmitOutcome(options = {}) {
   throw new Error(`步骤 5：资料提交后未检测到页面跳转或恢复成功（已点击提交 ${submitClickCount}/${maxSubmitClicks} 次）。URL: ${location.href}`);
 }
 
+function findPasskeyEnrollmentSkipAction() {
+  const skipPattern = /跳过|稍后|不用|不保存|取消|关闭|skip|not now|not\s*now|maybe\s*later|do\s*this\s*later|cancel|close/i;
+  const candidates = document.querySelectorAll(
+    'button, a, [role="button"], [role="link"], input[type="button"], input[type="submit"], input[type="reset"]'
+  );
+
+  return Array.from(candidates).find((el) => {
+    if (!isVisibleElement(el) || !isActionEnabled(el)) {
+      return false;
+    }
+    const text = typeof getActionText === 'function'
+      ? getActionText(el)
+      : [
+        el?.textContent,
+        el?.value,
+        el?.getAttribute?.('aria-label'),
+        el?.getAttribute?.('title'),
+      ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    return Boolean(text && skipPattern.test(text));
+  }) || null;
+}
+
+function getPasskeyEnrollmentStepState() {
+  if (isStep5Ready() || isSignupProfilePageUrl()) {
+    return {
+      state: 'step5',
+      profilePage: true,
+      url: location.href,
+    };
+  }
+
+  if (isLikelyLoggedInChatgptHomeUrl()) {
+    return {
+      state: 'logged_in_home',
+      skipProfileStep: true,
+      url: location.href,
+    };
+  }
+
+  if (isPasskeyEnrollmentPage()) {
+    return {
+      state: 'passkey_enrollment',
+      skipAction: findPasskeyEnrollmentSkipAction(),
+      url: location.href,
+    };
+  }
+
+  return {
+    state: 'unknown',
+    url: location.href,
+  };
+}
+
+async function waitForPasskeyEnrollmentStepState(timeout = 30000, options = {}) {
+  const desiredStates = Array.isArray(options.desiredStates) && options.desiredStates.length
+    ? new Set(options.desiredStates)
+    : new Set(['step5', 'logged_in_home', 'passkey_enrollment']);
+  const start = Date.now();
+  let lastState = getPasskeyEnrollmentStepState();
+
+  while (Date.now() - start < timeout) {
+    throwIfStopped();
+    lastState = getPasskeyEnrollmentStepState();
+    if (desiredStates.has(lastState.state)) {
+      return lastState;
+    }
+    await sleep(200);
+  }
+
+  return lastState;
+}
+
+async function waitForPasskeyEnrollmentSkipAction(timeout = 12000) {
+  const start = Date.now();
+  let lastState = getPasskeyEnrollmentStepState();
+
+  while (Date.now() - start < timeout) {
+    throwIfStopped();
+    lastState = getPasskeyEnrollmentStepState();
+    if (lastState.state !== 'passkey_enrollment') {
+      return { action: null, state: lastState };
+    }
+    if (lastState.skipAction) {
+      return { action: lastState.skipAction, state: lastState };
+    }
+    await sleep(200);
+  }
+
+  return { action: null, state: lastState };
+}
+
+function buildPasskeySkipCompletionPayload(state, extra = {}) {
+  if (state?.state === 'logged_in_home') {
+    return {
+      ...(extra || {}),
+      skipProfileStep: true,
+      skipProfileStepReason: 'passkey_skip_logged_in_home',
+      url: state.url || location.href,
+    };
+  }
+
+  if (state?.state === 'step5') {
+    return {
+      ...(extra || {}),
+      profilePage: true,
+      url: state.url || location.href,
+    };
+  }
+
+  return {
+    ...(extra || {}),
+    url: state?.url || location.href,
+  };
+}
+
+async function skipPasskeyEnrollmentStep(payload = {}) {
+  const timeoutMs = Math.max(1000, Number(payload?.timeoutMs) || 30000);
+  const initialState = await waitForPasskeyEnrollmentStepState(Math.min(8000, timeoutMs));
+
+  if (initialState.state === 'step5' || initialState.state === 'logged_in_home') {
+    const completionPayload = buildPasskeySkipCompletionPayload(initialState, {
+      passkeyEnrollmentAbsent: true,
+    });
+    log('步骤 4.5：未检测到通行密钥创建页，当前已进入后续页面。', 'ok', {
+      step: 45,
+      stepKey: 'skip-passkey-enrollment',
+    });
+    return completionPayload;
+  }
+
+  if (initialState.state !== 'passkey_enrollment') {
+    throw new Error(`步骤 4.5：未检测到通行密钥创建页、资料页或已登录页。URL: ${initialState.url || location.href}`);
+  }
+
+  const { action, state: actionState } = await waitForPasskeyEnrollmentSkipAction(Math.min(12000, timeoutMs));
+  if (actionState?.state === 'step5' || actionState?.state === 'logged_in_home') {
+    return buildPasskeySkipCompletionPayload(actionState, {
+      passkeyEnrollmentAbsent: true,
+    });
+  }
+  if (!action) {
+    throw new Error(`步骤 4.5：检测到通行密钥创建页，但未找到可点击的“跳过”按钮。URL: ${location.href}`);
+  }
+
+  const performOperationWithDelay = typeof getOperationDelayRunner === 'function'
+    ? getOperationDelayRunner()
+    : async (metadata, operation) => {
+        const rootScope = typeof window !== 'undefined' ? window : globalThis;
+        const gate = rootScope?.CodexOperationDelay?.performOperationWithDelay;
+        return typeof gate === 'function' ? gate(metadata, operation) : operation();
+      };
+
+  log('步骤 4.5：检测到通行密钥创建页，正在点击“跳过”。', 'info', {
+    step: 45,
+    stepKey: 'skip-passkey-enrollment',
+  });
+  await humanPause(350, 900);
+  await performOperationWithDelay({ stepKey: 'skip-passkey-enrollment', kind: 'click', label: 'skip-passkey-enrollment' }, async () => {
+    simulateClick(action);
+  });
+
+  const outcome = await waitForPasskeyEnrollmentStepState(timeoutMs, {
+    desiredStates: ['step5', 'logged_in_home'],
+  });
+  if (outcome.state === 'step5' || outcome.state === 'logged_in_home') {
+    const completionPayload = buildPasskeySkipCompletionPayload(outcome, {
+      skippedPasskeyEnrollment: true,
+    });
+    log('步骤 4.5：已跳过通行密钥创建页。', 'ok', {
+      step: 45,
+      stepKey: 'skip-passkey-enrollment',
+    });
+    return completionPayload;
+  }
+
+  if (isPasskeyEnrollmentPage()) {
+    throw new Error(`步骤 4.5：点击“跳过”后仍停留在通行密钥创建页。URL: ${location.href}`);
+  }
+
+  throw new Error(`步骤 4.5：点击“跳过”后未进入资料页或已登录页。URL: ${outcome.url || location.href}`);
+}
+
 async function step5_fillNameBirthday(payload) {
+  if (isPasskeyEnrollmentPage()) {
+    throw new Error('当前页面仍停留在通行密钥注册页，请先执行跳过通行密钥节点。URL: ' + location.href);
+  }
+
   const { firstName, lastName, age, year, month, day, prefillOnly = false } = payload;
   if (!firstName || !lastName) throw new Error('未提供姓名数据。');
   const performOperationWithDelay = typeof getOperationDelayRunner === 'function'

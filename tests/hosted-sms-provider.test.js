@@ -118,3 +118,37 @@ test('hosted-sms skips blocked entries when rotating numbers', () => {
   assert.equal(selected.key, entries[1].key);
   assert.equal(exhausted, null);
 });
+
+test('hosted-sms skips pool entries after three uses', () => {
+  const entries = hostedSms.parseHostedSmsPoolEntries(
+    [
+      '2092905100----https://example.test/api/a?key=one',
+      '2092905101----https://example.test/api/a?key=two',
+    ].join('\n')
+  );
+  const usage = {
+    [entries[0].key]: { useCount: 3, usedAt: 1000 },
+    [entries[1].key]: { useCount: 2, usedAt: 2000 },
+  };
+
+  const selected = hostedSms.chooseHostedSmsPoolEntry(entries, usage);
+
+  assert.equal(selected.key, entries[1].key);
+});
+
+test('hosted-sms returns no pool entry when all numbers reached three uses', () => {
+  const entries = hostedSms.parseHostedSmsPoolEntries(
+    [
+      '2092905100----https://example.test/api/a?key=one',
+      '2092905101----https://example.test/api/a?key=two',
+    ].join('\n')
+  );
+  const usage = {
+    [entries[0].key]: { useCount: 3, usedAt: 1000 },
+    [entries[1].key]: { useCount: 4, usedAt: 2000 },
+  };
+
+  const selected = hostedSms.chooseHostedSmsPoolEntry(entries, usage);
+
+  assert.equal(selected, null);
+});
