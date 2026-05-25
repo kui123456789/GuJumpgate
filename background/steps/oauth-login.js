@@ -163,6 +163,11 @@
       return getStep7ResultState(result) === 'verification_page' && !isStep7PhoneVerificationResult(result);
     }
 
+    function isMissingStep7LoginIdentifierError(error) {
+      const message = String(typeof error === 'string' ? error : error?.message || '').trim();
+      return /缺少登录账号|登录时缺少邮箱地址或手机号|missing\s+(?:login\s+)?(?:account|email|phone)/i.test(message);
+    }
+
     function buildStep7CompletionPayload(result = {}, currentState = {}, currentIdentifierType = '', currentPhoneNumber = '') {
       const phoneSignupMode = currentIdentifierType === 'phone';
       const payload = {
@@ -267,7 +272,10 @@
         (resolvedIdentifierType === 'phone' && !phoneNumber)
         || (resolvedIdentifierType !== 'phone' && !email)
       ) {
-        throw new Error('缺少登录账号：请先完成步骤 2，或在侧栏“注册邮箱/注册手机号”中手动填写账号后再执行当前步骤。');
+        await addLog('步骤 7：当前没有本地登录账号，先尝试使用浏览器现有 ChatGPT/Auth 登录态打开 OAuth。', 'warn', {
+          step: completionStep,
+          stepKey: 'oauth-login',
+        });
       }
 
       let attempt = 0;
@@ -415,6 +423,9 @@
               { step: completionStep, stepKey: 'oauth-login' }
             );
             throw err;
+          }
+          if (isMissingStep7LoginIdentifierError(err)) {
+            throw new Error(`步骤 ${completionStep}：当前 OAuth 页面需要重新登录，但扩展缺少登录账号；请先完成步骤 2，或在侧栏“注册邮箱/注册手机号”中手动填写账号后再执行当前步骤。`);
           }
           lastError = err;
           if (attempt >= STEP6_MAX_ATTEMPTS) {

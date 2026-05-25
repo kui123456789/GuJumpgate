@@ -6173,11 +6173,17 @@ async function step6_login(payload) {
   const visibleStep = Math.floor(Number(payload?.visibleStep) || 0) || 7;
   const { email, phoneNumber } = payload;
   const loginIdentifierType = String(payload?.loginIdentifierType || '').trim();
-  if (!email && !phoneNumber) throw new Error('登录时缺少邮箱地址或手机号。');
+  const hasLoginIdentifier = Boolean(email || phoneNumber);
+  const throwMissingLoginIdentifier = () => {
+    throw new Error('登录时缺少邮箱地址或手机号。当前 OAuth 页面需要重新登录，请先完成步骤 2，或在侧栏“注册邮箱/注册手机号”中填写账号。');
+  };
 
   const snapshot = normalizeStep6Snapshot(await waitForKnownLoginAuthState(15000));
 
   if (snapshot.state === 'verification_page' || snapshot.state === 'phone_verification_page') {
+    if (!hasLoginIdentifier) {
+      throwMissingLoginIdentifier();
+    }
     log('认证页已在登录验证码页，开始确认页面是否稳定。', 'info', { step: visibleStep, stepKey: 'oauth-login' });
     return finalizeStep6VerificationReady({
       visibleStep,
@@ -6204,6 +6210,9 @@ async function step6_login(payload) {
   }
 
   if (snapshot.state === 'login_timeout_error_page') {
+    if (!hasLoginIdentifier) {
+      throwMissingLoginIdentifier();
+    }
     log('检测到登录超时报错页，先尝试恢复当前页面。', 'warn', { step: visibleStep, stepKey: 'oauth-login' });
     const transition = await createStep6LoginTimeoutRecoveryTransition(
       'login_timeout_error_page',
@@ -6239,6 +6248,9 @@ async function step6_login(payload) {
   }
 
   if (snapshot.state === 'email_page') {
+    if (!hasLoginIdentifier) {
+      throwMissingLoginIdentifier();
+    }
     if (loginIdentifierType === 'phone' && phoneNumber) {
       return switchFromEmailPageToPhoneLogin(payload, snapshot);
     }
@@ -6247,16 +6259,25 @@ async function step6_login(payload) {
   }
 
   if (snapshot.state === 'phone_entry_page') {
+    if (!hasLoginIdentifier) {
+      throwMissingLoginIdentifier();
+    }
     log('正在使用手机号登录...', 'info', { step: visibleStep, stepKey: 'oauth-login' });
     return step6LoginFromPhonePage(payload, snapshot);
   }
 
   if (snapshot.state === 'password_page') {
+    if (!hasLoginIdentifier) {
+      throwMissingLoginIdentifier();
+    }
     log('认证页已在密码页，继续当前登录流程。', 'info', { step: visibleStep, stepKey: 'oauth-login' });
     return step6LoginFromPasswordPage(payload, snapshot);
   }
 
   if (snapshot.state === 'entry_page') {
+    if (!hasLoginIdentifier) {
+      throwMissingLoginIdentifier();
+    }
     return step6OpenLoginEntry(payload, snapshot);
   }
 
