@@ -11,6 +11,7 @@ const PAYPAL_HOSTED_STAGE_VERIFICATION = 'verification';
 const PAYPAL_HOSTED_STAGE_REVIEW = 'review_consent';
 const PAYPAL_HOSTED_STAGE_APPROVAL = 'approval';
 const PAYPAL_HOSTED_STAGE_GENERIC_ERROR = 'generic_error';
+const PAYPAL_HOSTED_STAGE_PHONE_REJECTED = 'phone_rejected';
 const PAYPAL_HOSTED_STAGE_UNKNOWN = 'unknown';
 const PAYPAL_HOSTED_HERMES_AUTORUN_SENTINEL = '__MULTIPAGE_PAYPAL_HOSTED_HERMES_AUTORUN__';
 const PAYPAL_HOSTED_GUEST_SUBMIT_SENTINEL = '__MULTIPAGE_PAYPAL_HOSTED_GUEST_SUBMIT__';
@@ -306,6 +307,107 @@ function isPayPalHostedGenericErrorPage() {
     );
 }
 
+function getHostedPhoneRejectedErrorText() {
+  const rejectedPatterns = [
+    /we[’']?re\s+unable\s+to\s+complete\s+your\s+request/i,
+    /unable\s+to\s+complete\s+your\s+request/i,
+    /try\s+a\s+different\s+phone\s+number/i,
+    /换.*(?:电话|手机|号码)|更换.*(?:电话|手机|号码)|请.*使用.*(?:其他|其它).*(?:电话|手机|号码)/i,
+  ];
+  const likelyContainers = [
+    ...getVisibleControls([
+      '[role="alertdialog"]',
+      '[role="dialog"]',
+      '[aria-modal="true"]',
+      '[role="alert"]',
+      '.modal',
+      '.dialog',
+      '.vx_modal',
+      '.vx_modal-content',
+      '.notifications',
+      '.message',
+      '.error',
+    ].join(',')),
+    document.body,
+  ].filter(Boolean);
+  const seen = new Set();
+  for (const container of likelyContainers) {
+    if (!container || seen.has(container) || !isVisibleElement(container)) {
+      continue;
+    }
+    seen.add(container);
+    const text = normalizeText(container.innerText || container.textContent || '');
+    if (!text) {
+      continue;
+    }
+    const matches = rejectedPatterns.filter((pattern) => pattern.test(text)).length;
+    if (
+      matches >= 2
+      || /try\s+a\s+different\s+phone\s+number/i.test(text)
+      || /换.*(?:电话|手机|号码)|更换.*(?:电话|手机|号码)/i.test(text)
+    ) {
+      return text.slice(0, 500);
+    }
+  }
+  return '';
+}
+
+function findHostedPhoneRejectedDismissButton() {
+  if (!getHostedPhoneRejectedErrorText()) {
+    return null;
+  }
+  const scopedContainers = getVisibleControls([
+    '[role="alertdialog"]',
+    '[role="dialog"]',
+    '[aria-modal="true"]',
+    '[role="alert"]',
+    '.modal',
+    '.dialog',
+    '.vx_modal',
+    '.vx_modal-content',
+  ].join(','));
+  const controlSelector = 'button, a, [role="button"], input[type="button"], input[type="submit"]';
+  const matchesDismissText = (el) => /^(?:ok|okay)$/i.test(getActionText(el))
+    || /确定|知道了|好的/i.test(getActionText(el));
+  for (const container of scopedContainers) {
+    const button = Array.from(container.querySelectorAll(controlSelector))
+      .find((el) => isVisibleElement(el) && isEnabledControl(el) && matchesDismissText(el));
+    if (button) {
+      return button;
+    }
+  }
+  return getVisibleControls(controlSelector)
+    .find((el) => isEnabledControl(el) && matchesDismissText(el)) || null;
+}
+
+async function dismissHostedPhoneRejectedDialog() {
+  const errorText = getHostedPhoneRejectedErrorText();
+  const button = findHostedPhoneRejectedDismissButton();
+  if (!errorText) {
+    return {
+      stage: detectPayPalHostedCheckoutStage(),
+      dismissed: false,
+      phoneRejected: false,
+    };
+  }
+  if (!button) {
+    throw new Error(`PayPal hosted checkout 号码拒绝弹窗缺少可点击 OK 按钮：${errorText}`);
+  }
+  await performPayPalOperationWithDelay(
+    { stepKey: 'paypal-hosted-checkout', kind: 'click', label: 'dismiss-phone-error' },
+    async () => {
+      simulateClick(button);
+    }
+  );
+  await sleep(500);
+  return {
+    stage: PAYPAL_HOSTED_STAGE_PHONE_REJECTED,
+    dismissed: true,
+    phoneRejected: true,
+    errorText,
+  };
+}
+
 function isPayPalHostedReviewPage() {
   return /\/webapps\/hermes/i.test(getPayPalHostedPathname());
 }
@@ -356,6 +458,9 @@ function findHostedReviewConsentButton() {
 function detectPayPalHostedCheckoutStage() {
   if (!/paypal\./i.test(String(location?.host || ''))) {
     return PAYPAL_HOSTED_STAGE_OUTSIDE;
+  }
+  if (getHostedPhoneRejectedErrorText()) {
+    return PAYPAL_HOSTED_STAGE_PHONE_REJECTED;
   }
   if (hasHostedVerificationInputs()) {
     return PAYPAL_HOSTED_STAGE_VERIFICATION;
@@ -803,10 +908,22 @@ async function clickHostedReviewConsent() {
 }
 
 async function runHostedCheckoutStep(payload = {}) {
+  if (payload.dismissPhoneError) {
+    return dismissHostedPhoneRejectedDialog();
+  }
   if (isPayPalHostedReviewPage()) {
     return clickHostedReviewConsent();
   }
   const stage = detectPayPalHostedCheckoutStage();
+  if (stage === PAYPAL_HOSTED_STAGE_PHONE_REJECTED) {
+    return {
+      stage,
+      submitted: false,
+      phoneRejected: true,
+      errorText: getHostedPhoneRejectedErrorText(),
+      dismissReady: Boolean(findHostedPhoneRejectedDismissButton()),
+    };
+  }
   if (stage === PAYPAL_HOSTED_STAGE_VERIFICATION) {
     if (payload.resendVerificationCode) {
       return clickHostedVerificationResend();
@@ -1070,6 +1187,7 @@ function inspectPayPalState() {
   const approveButton = findApproveButton();
   const loginPhase = getPayPalLoginPhase(emailInput, passwordInput);
   const hostedStage = detectPayPalHostedCheckoutStage();
+  const hostedPhoneErrorText = getHostedPhoneRejectedErrorText();
   return {
     url: location.href,
     readyState: document.readyState,
@@ -1083,6 +1201,9 @@ function inspectPayPalState() {
     hasHostedGuestCheckout: hostedStage === PAYPAL_HOSTED_STAGE_GUEST_CHECKOUT,
     hostedGenericError: hostedStage === PAYPAL_HOSTED_STAGE_GENERIC_ERROR,
     hostedGenericErrorMessage: getPayPalHostedGenericErrorMessage(),
+    hostedPhoneRejected: hostedStage === PAYPAL_HOSTED_STAGE_PHONE_REJECTED || Boolean(hostedPhoneErrorText),
+    hostedPhoneErrorText,
+    hostedPhoneErrorDismissReady: Boolean(findHostedPhoneRejectedDismissButton()),
     verificationInputsVisible: hasHostedVerificationInputs(),
     hostedVerificationInvalidCode: hasHostedInvalidVerificationCodeError(),
     hostedVerificationErrorText: getHostedVerificationErrorText(),

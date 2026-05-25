@@ -855,6 +855,8 @@ function FindProxyForURL(url, host) {
           usedAt: Math.max(0, Number(usage.usedAt) || 0),
           lastAttemptAt: Math.max(0, Number(usage.lastAttemptAt) || 0),
           lastError: String(usage.lastError || '').trim(),
+          blockedAt: Math.max(0, Number(usage.blockedAt) || 0),
+          blockedReason: String(usage.blockedReason || '').trim(),
         }];
       }).filter(([key]) => Boolean(key)));
     }
@@ -896,6 +898,9 @@ function FindProxyForURL(url, host) {
       return entries
         .map((entry, index) => {
           const itemUsage = normalizedUsage[entry.key] || {};
+          if (itemUsage.blockedAt) {
+            return null;
+          }
           return {
             ...entry,
             index: Number.isFinite(entry.index) ? entry.index : index,
@@ -903,6 +908,7 @@ function FindProxyForURL(url, host) {
             usedAt: Math.max(0, Number(itemUsage.usedAt) || 0),
           };
         })
+        .filter(Boolean)
         .sort((left, right) => {
           if (left.useCount !== right.useCount) {
             return left.useCount - right.useCount;
@@ -973,6 +979,8 @@ function FindProxyForURL(url, host) {
             : Math.max(0, Number(previous.usedAt) || 0),
           lastAttemptAt: now,
           lastError: success ? '' : String(options.error || '').trim(),
+          blockedAt: Math.max(0, Number(previous.blockedAt) || 0),
+          blockedReason: String(previous.blockedReason || '').trim(),
         },
       };
       await applyHostedCheckoutRuntimePatch({
@@ -980,6 +988,93 @@ function FindProxyForURL(url, host) {
         hostedCheckoutSmsPoolUsage: nextUsage,
       });
       return nextUsage;
+    }
+
+    async function getHostedCheckoutSmsPoolSnapshot() {
+      const state = typeof getState === 'function' ? await getState().catch(() => ({})) : {};
+      let stored = {};
+      if (chrome?.storage?.local?.get) {
+        stored = await chrome.storage.local.get([
+          'hostedCheckoutSmsPoolText',
+          'hostedCheckoutSmsPoolUsage',
+        ]).catch(() => ({}));
+      }
+      const poolEntries = parseHostedCheckoutSmsPoolEntries(
+        stored?.hostedCheckoutSmsPoolText
+        || state?.hostedCheckoutSmsPoolText
+        || ''
+      );
+      const poolUsage = normalizeHostedCheckoutSmsPoolUsage(
+        stored?.hostedCheckoutSmsPoolUsage
+        || state?.hostedCheckoutSmsPoolUsage
+        || {}
+      );
+      return {
+        state,
+        stored,
+        poolEntries,
+        poolUsage,
+        currentEntry: normalizeHostedCheckoutCurrentSmsEntry(state?.hostedCheckoutCurrentSmsEntry, poolEntries),
+      };
+    }
+
+    async function blockHostedCheckoutCurrentSmsEntry(entry = null, reason = '') {
+      const snapshot = await getHostedCheckoutSmsPoolSnapshot();
+      const normalizedEntry = normalizeHostedCheckoutCurrentSmsEntry(entry || snapshot.currentEntry, snapshot.poolEntries);
+      if (!normalizedEntry?.key) {
+        return null;
+      }
+      const now = Date.now();
+      const usage = normalizeHostedCheckoutSmsPoolUsage(snapshot.poolUsage || {});
+      const previous = usage[normalizedEntry.key] || {};
+      const blockedReason = String(reason || 'PayPal hosted checkout 拒绝当前电话号码。').trim();
+      const nextUsage = {
+        ...usage,
+        [normalizedEntry.key]: {
+          useCount: Math.max(0, Math.floor(Number(previous.useCount) || 0)),
+          usedAt: Math.max(0, Number(previous.usedAt) || 0),
+          lastAttemptAt: now,
+          lastError: blockedReason,
+          blockedAt: now,
+          blockedReason,
+        },
+      };
+      await applyHostedCheckoutRuntimePatch({
+        hostedCheckoutCurrentSmsEntry: null,
+        hostedCheckoutSmsPoolUsage: nextUsage,
+      });
+      return {
+        entry: normalizedEntry,
+        usage: nextUsage,
+        poolEntries: snapshot.poolEntries,
+      };
+    }
+
+    async function rotateHostedCheckoutSmsEntryAfterPhoneReject(reason = '') {
+      const snapshot = await getHostedCheckoutSmsPoolSnapshot();
+      const currentEntry = normalizeHostedCheckoutCurrentSmsEntry(snapshot.currentEntry, snapshot.poolEntries);
+      if (!currentEntry?.key) {
+        throw new Error('步骤 6：PayPal hosted checkout 当前使用的是单独配置的固定电话，固定电话被 PayPal 拒绝后无法自动换号；请更换固定电话或导入 hosted checkout 号池。');
+      }
+      const blocked = await blockHostedCheckoutCurrentSmsEntry(currentEntry, reason);
+      const nextEntry = chooseHostedCheckoutSmsPoolEntry(blocked?.poolEntries || snapshot.poolEntries, blocked?.usage || {});
+      if (!nextEntry) {
+        throw new Error('步骤 6：PayPal hosted checkout 没有可用号码：号池中的号码均已被标记不可用。');
+      }
+      const nextUsage = await updateHostedCheckoutPoolUsage(nextEntry, {
+        incrementUseCount: true,
+        success: true,
+      });
+      await addLog(
+        `步骤 6：PayPal hosted checkout 已切换到下一个号码 ${nextEntry.phone}（当前累计 ${Math.max(0, Number(nextUsage?.[nextEntry.key]?.useCount) || 0)} 次）。`,
+        'info'
+      );
+      return {
+        phone: nextEntry.phone,
+        verificationUrl: nextEntry.verificationUrl,
+        hostedCheckoutCurrentSmsEntry: nextEntry,
+        hostedCheckoutUsesSmsPool: true,
+      };
     }
 
     async function getHostedCheckoutRuntimeConfig(options = {}) {
@@ -1008,6 +1103,9 @@ function FindProxyForURL(url, host) {
         || {}
       );
       let selectedSmsEntry = normalizeHostedCheckoutCurrentSmsEntry(state?.hostedCheckoutCurrentSmsEntry, poolEntries);
+      if (selectedSmsEntry && poolUsage[selectedSmsEntry.key]?.blockedAt) {
+        selectedSmsEntry = null;
+      }
       if (!selectedSmsEntry && ensureCurrentSmsEntry && poolEntries.length > 0) {
         selectedSmsEntry = chooseHostedCheckoutSmsPoolEntry(poolEntries, poolUsage);
         if (selectedSmsEntry) {
@@ -1650,6 +1748,28 @@ function FindProxyForURL(url, host) {
         }
 
         const pageState = await getHostedCheckoutPayPalState(tabId);
+        if (pageState.hostedPhoneRejected || pageState.hostedStage === 'phone_rejected') {
+          const hostedPhoneErrorText = String(
+            pageState.hostedPhoneErrorText
+            || 'PayPal hosted checkout 拒绝当前电话号码，请尝试其他电话号码。'
+          ).trim();
+          await addLog(`步骤 6：检测到 PayPal hosted checkout 电话号码被拒绝：${hostedPhoneErrorText}`, 'warn');
+          await runHostedCheckoutPayPalStep(tabId, {
+            dismissPhoneError: true,
+          });
+          const nextRuntimeConfig = await rotateHostedCheckoutSmsEntryAfterPhoneReject(hostedPhoneErrorText);
+          await addLog('步骤 6：PayPal hosted checkout 号码被拒绝，已标记当前号码不可用并切换下一个号码。', 'warn');
+          hostedVerificationSubmitted = false;
+          loggedWaitingForHostedVerificationResult = false;
+          await sleepWithStop(500);
+          await runHostedCheckoutPayPalStep(tabId, {
+            ...guestProfile,
+            phone: String(nextRuntimeConfig?.phone || guestProfile.phone || '').trim(),
+          });
+          await sleepWithStop(1500);
+          continue;
+        }
+
         if (pageState.hostedStage === 'generic_error' || pageState.hostedGenericError) {
           await requestHostedCheckoutGenericErrorChoice(tabId, pageState);
           return;

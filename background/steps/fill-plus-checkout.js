@@ -1610,6 +1610,45 @@
       }
     }
 
+    function isInvalidCustomerAddressForTaxError(result = {}) {
+      return result?.checkoutErrorCode === 'invalid_customer_address_for_tax';
+    }
+
+    async function findCheckoutAddressTaxError(tabId, preferredFrames = []) {
+      const frames = [];
+      const seenFrameIds = new Set();
+      const addFrame = (frame) => {
+        const frameId = Number(frame?.frameId);
+        if (!Number.isInteger(frameId) || seenFrameIds.has(frameId)) {
+          return;
+        }
+        seenFrameIds.add(frameId);
+        frames.push({
+          frameId,
+          url: frame.url || frame.frameUrl || '',
+          ready: frame.ready !== false,
+        });
+      };
+
+      preferredFrames.forEach(addFrame);
+      try {
+        (await getReadyCheckoutFrames(tabId)).forEach(addFrame);
+      } catch {
+        // Preferred frames are enough for best-effort error inspection.
+      }
+
+      const inspections = await inspectCheckoutFrames(tabId, frames);
+      const matched = inspections.find((item) => isInvalidCustomerAddressForTaxError(item.result));
+      if (!matched) {
+        return null;
+      }
+      return {
+        frame: matched.frame,
+        checkoutErrorCode: matched.result?.checkoutErrorCode || '',
+        checkoutErrorText: matched.result?.checkoutErrorText || '',
+      };
+    }
+
     function isPaymentFrameUrl(url = '') {
       return /elements-inner-payment|componentName=payment/i.test(String(url || ''));
     }
@@ -1928,86 +1967,94 @@
         && !resolveMeiguodizhiCountryCode(billingState?.ipProxyAppliedExitRegion || billingState?.ipProxyExitRegion || '')) {
         throw new Error('步骤 7：GoPay 账单地址需要当前代理出口国家/地区，但本次复测没有拿到国家码；已停止填写，避免误用旧的 KR/ID 地区。请先点 IP 代理“检测出口”，确认显示 JP 后再继续。');
       }
-      const addressSeed = await resolveBillingAddressSeed(billingState, billingFrame.countryText, { paymentMethod });
-      if (!addressSeed) {
-        throw new Error('步骤 7：未找到可用的本地账单地址种子。');
-      }
-
-      await addLog(`步骤 7：正在填写账单地址（${addressSeed.countryCode} / ${addressSeed.query}）...`, 'info');
-      const autocompleteFrame = await resolveOptionalFrameByUrl(tabId, isAutocompleteFrameUrl);
+      let addressSeed = null;
       let result = null;
-      if (!addressSeed.skipAutocomplete && autocompleteFrame?.frame && autocompleteFrame.frame.frameId !== billingFrame.frameId) {
-        if (!autocompleteFrame.ready) {
-          throw new Error('步骤 7：发现 Google 地址推荐 iframe，但无法注入账单脚本。请提供该 iframe 的控制台结构。');
-        }
-        await addLog(`步骤 7：Google 地址推荐位于独立 iframe（frameId=${autocompleteFrame.frame.frameId}），将拆分输入与选择动作。`, 'info');
 
-        const queryResult = await sendFrameMessage(tabId, billingFrame.frameId, {
-          type: 'PLUS_CHECKOUT_FILL_ADDRESS_QUERY',
-          source: 'background',
-          payload: {
-            fullName,
-            addressSeed,
-            autoCheckAgreement: Boolean(addressSeed.autoCheckAgreement),
-          },
+      async function fillBillingAddressWithFreshSeed(options = {}) {
+        const forceOverwriteStructuredAddress = Boolean(options.forceOverwriteStructuredAddress);
+        addressSeed = await resolveBillingAddressSeed(billingState, billingFrame.countryText, { paymentMethod });
+        if (!addressSeed) {
+          throw new Error('步骤 7：未找到可用的本地账单地址种子。');
+        }
+
+        await addLog(`步骤 7：正在填写账单地址（${addressSeed.countryCode} / ${addressSeed.query}）...`, 'info');
+        const autocompleteFrame = await resolveOptionalFrameByUrl(tabId, isAutocompleteFrameUrl);
+        if (!addressSeed.skipAutocomplete && autocompleteFrame?.frame && autocompleteFrame.frame.frameId !== billingFrame.frameId) {
+          if (!autocompleteFrame.ready) {
+            throw new Error('步骤 7：发现 Google 地址推荐 iframe，但无法注入账单脚本。请提供该 iframe 的控制台结构。');
+          }
+          await addLog(`步骤 7：Google 地址推荐位于独立 iframe（frameId=${autocompleteFrame.frame.frameId}），将拆分输入与选择动作。`, 'info');
+
+          const queryResult = await sendFrameMessage(tabId, billingFrame.frameId, {
+            type: 'PLUS_CHECKOUT_FILL_ADDRESS_QUERY',
+            source: 'background',
+            payload: {
+              fullName,
+              addressSeed,
+              autoCheckAgreement: Boolean(addressSeed.autoCheckAgreement),
+            },
+          });
+          if (queryResult?.error) {
+            throw new Error(queryResult.error);
+          }
+
+          const suggestionResult = await sendFrameMessage(tabId, autocompleteFrame.frame.frameId, {
+            type: 'PLUS_CHECKOUT_SELECT_ADDRESS_SUGGESTION',
+            source: 'background',
+            payload: {
+              addressSeed,
+            },
+          });
+          const suggestionError = suggestionResult?.error || '';
+          if (suggestionError) {
+            await addLog(`步骤 7：Google 地址推荐不可用，将改用本地地址字段兜底：${suggestionError}`, 'warn');
+          }
+
+          const structuredResult = await sendFrameMessage(tabId, billingFrame.frameId, {
+            type: 'PLUS_CHECKOUT_ENSURE_BILLING_ADDRESS',
+            source: 'background',
+            payload: {
+              addressSeed,
+              overwriteStructuredAddress: Boolean(suggestionError || forceOverwriteStructuredAddress),
+              autoCheckAgreement: Boolean(addressSeed.autoCheckAgreement),
+            },
+          });
+          if (structuredResult?.error) {
+            throw new Error(structuredResult.error);
+          }
+
+          result = {
+            ...structuredResult,
+            selectedAddressText: suggestionError ? '' : (suggestionResult?.selectedAddressText || ''),
+          };
+        } else {
+          result = await sendFrameMessage(tabId, billingFrame.frameId, {
+            type: 'PLUS_CHECKOUT_FILL_BILLING_ADDRESS',
+            source: 'background',
+            payload: {
+              fullName,
+              addressSeed,
+              overwriteStructuredAddress: Boolean(forceOverwriteStructuredAddress),
+              autoCheckAgreement: Boolean(addressSeed.autoCheckAgreement),
+            },
+          });
+
+          if (result?.error) {
+            throw new Error(result.error);
+          }
+        }
+
+        await setState({
+          plusCheckoutTabId: tabId,
+          plusBillingCountryText: result?.countryText || '',
+          plusBillingAddress: result?.structuredAddress || null,
         });
-        if (queryResult?.error) {
-          throw new Error(queryResult.error);
-        }
-
-        const suggestionResult = await sendFrameMessage(tabId, autocompleteFrame.frame.frameId, {
-          type: 'PLUS_CHECKOUT_SELECT_ADDRESS_SUGGESTION',
-          source: 'background',
-          payload: {
-            addressSeed,
-          },
+        await ensureFreeTrialAmount(tabId, state, {
+          phaseLabel: '提交订阅前',
         });
-        const suggestionError = suggestionResult?.error || '';
-        if (suggestionError) {
-          await addLog(`步骤 7：Google 地址推荐不可用，将改用本地地址字段兜底：${suggestionError}`, 'warn');
-        }
-
-        const structuredResult = await sendFrameMessage(tabId, billingFrame.frameId, {
-          type: 'PLUS_CHECKOUT_ENSURE_BILLING_ADDRESS',
-          source: 'background',
-          payload: {
-            addressSeed,
-            overwriteStructuredAddress: Boolean(suggestionError),
-            autoCheckAgreement: Boolean(addressSeed.autoCheckAgreement),
-          },
-        });
-        if (structuredResult?.error) {
-          throw new Error(structuredResult.error);
-        }
-
-        result = {
-          ...structuredResult,
-          selectedAddressText: suggestionError ? '' : (suggestionResult?.selectedAddressText || ''),
-        };
-      } else {
-        result = await sendFrameMessage(tabId, billingFrame.frameId, {
-          type: 'PLUS_CHECKOUT_FILL_BILLING_ADDRESS',
-          source: 'background',
-          payload: {
-            fullName,
-            addressSeed,
-            autoCheckAgreement: Boolean(addressSeed.autoCheckAgreement),
-          },
-        });
-
-        if (result?.error) {
-          throw new Error(result.error);
-        }
       }
 
-      await setState({
-        plusCheckoutTabId: tabId,
-        plusBillingCountryText: result?.countryText || '',
-        plusBillingAddress: result?.structuredAddress || null,
-      });
-      await ensureFreeTrialAmount(tabId, state, {
-        phaseLabel: '提交订阅前',
-      });
+      await fillBillingAddressWithFreshSeed();
 
       let redirectedToPayment = false;
       let lastSubmitError = '';
@@ -2044,6 +2091,32 @@
         redirectedToPayment = await waitForPaymentRedirectAfterSubmit(tabId, paymentMethod);
         if (redirectedToPayment) {
           break;
+        }
+        const checkoutAddressTaxError = await findCheckoutAddressTaxError(tabId, [
+          subscribeFrame,
+          {
+            frameId: billingFrame.frameId,
+            frameUrl: billingFrame.frameUrl || '',
+          },
+          {
+            frameId: paymentFrame.frameId,
+            frameUrl: paymentFrame.frameUrl || '',
+          },
+        ]);
+        if (checkoutAddressTaxError) {
+          const errorText = normalizeText(checkoutAddressTaxError.checkoutErrorText || '');
+          lastSubmitError = errorText
+            ? `checkout 地址无法用于税费计算：${errorText}`
+            : 'checkout 地址无法用于税费计算';
+          if (attempt < PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS) {
+            await addLog('步骤 7：检测到 checkout 地址无法用于税费计算，正在换一个账单地址重新填写。', 'warn');
+            await fillBillingAddressWithFreshSeed({
+              forceOverwriteStructuredAddress: true,
+            });
+            continue;
+          }
+          await addLog(`步骤 7：检测到 checkout 地址无法用于税费计算，但已达到提交上限。${errorText ? `错误：${errorText}` : ''}`, 'warn');
+          continue;
         }
         lastSubmitError = `提交后 ${Math.round(PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS / 1000)} 秒内未跳转到 ${paymentConfig.label}`;
         await addLog(`步骤 7：${lastSubmitError}，将重试提交。`, 'warn');

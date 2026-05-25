@@ -457,6 +457,104 @@ function normalizeText(text = '') {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
+const CHECKOUT_ADDRESS_TAX_ERROR_CODE = 'invalid_customer_address_for_tax';
+const CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS = [
+  /customer'?s\s+location\s+isn'?t\s+recognized/i,
+  /set\s+a\s+valid\s+customer\s+address/i,
+  /valid\s+customer\s+address[\s\S]{0,120}tax/i,
+  /tax[\s\S]{0,120}valid\s+customer\s+address/i,
+  /calculate\s+tax/i,
+  /客户.*位置/i,
+  /有效.*地址/i,
+  /计算.*税/i,
+  /税费/i,
+];
+
+function classifyCheckoutErrorText(text = '') {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return '';
+  }
+  const hasEnglishTaxAddressError = CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[0].test(normalized)
+    || CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[1].test(normalized)
+    || CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[2].test(normalized)
+    || CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[3].test(normalized)
+    || (CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[4].test(normalized) && /customer|address|location/i.test(normalized));
+  const hasChineseTaxAddressError = CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[5].test(normalized)
+    || CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[6].test(normalized)
+    || CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[7].test(normalized)
+    || (CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS[8].test(normalized) && /客户|地址|位置/i.test(normalized));
+  return hasEnglishTaxAddressError || hasChineseTaxAddressError
+    ? CHECKOUT_ADDRESS_TAX_ERROR_CODE
+    : '';
+}
+
+function getCheckoutErrorExcerpt(text = '') {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return '';
+  }
+  const match = CHECKOUT_ADDRESS_TAX_ERROR_PATTERNS
+    .map((pattern) => normalized.match(pattern))
+    .find(Boolean);
+  const start = Math.max(0, (match?.index || 0) - 160);
+  return normalized.slice(start, start + 600);
+}
+
+function queryVisibleCheckoutErrorElements() {
+  const selectors = [
+    '[role="alert"]',
+    '[aria-live]',
+    '[data-field-error]',
+    '[data-testid*="error" i]',
+    '[data-test*="error" i]',
+    '[class*="error" i]',
+    '[id*="error" i]',
+    'form',
+  ];
+  const seen = new Set();
+  const elements = [];
+  for (const selector of selectors) {
+    try {
+      for (const element of Array.from(document.querySelectorAll(selector))) {
+        if (!element || seen.has(element) || !isVisibleElement(element)) {
+          continue;
+        }
+        seen.add(element);
+        elements.push(element);
+      }
+    } catch {
+      // Ignore selector support differences across checkout frames.
+    }
+  }
+  return elements;
+}
+
+function inspectVisibleCheckoutError() {
+  const candidates = queryVisibleCheckoutErrorElements()
+    .map((element) => normalizeText(element.innerText || element.textContent || ''))
+    .filter(Boolean);
+  const bodyText = normalizeText(document.body?.innerText || document.body?.textContent || '');
+  if (bodyText) {
+    candidates.push(bodyText);
+  }
+
+  for (const text of candidates) {
+    const checkoutErrorCode = classifyCheckoutErrorText(text);
+    if (!checkoutErrorCode) {
+      continue;
+    }
+    return {
+      checkoutErrorCode,
+      checkoutErrorText: getCheckoutErrorExcerpt(text),
+    };
+  }
+  return {
+    checkoutErrorCode: '',
+    checkoutErrorText: '',
+  };
+}
+
 function parseLocalizedAmount(rawValue = '') {
   const raw = normalizeText(rawValue);
   const match = raw.match(/(?:[$€£¥]\s*)?([+-]?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})|[+-]?\d+(?:[.,]\d{1,2})?)(?:\s*[$€£¥])?/);
@@ -1988,6 +2086,7 @@ async function fillPlusBillingAddress(payload = {}) {
   let selected = { selectedText: '' };
   const fields = getStructuredAddressFields();
   const useDirectStructuredBranch = Boolean(seed.skipAutocomplete || isDropdownStructuredAddressForm(fields));
+  const overwriteStructuredAddress = Boolean(payload.overwriteStructuredAddress || useDirectStructuredBranch);
   if (!useDirectStructuredBranch) {
     await performOperationWithDelay({ stepKey: 'plus-checkout-billing', kind: 'fill', label: 'fill-address-query' }, async () => {
       await ensureCountrySelectionBeforeAutocomplete(seed);
@@ -2003,7 +2102,7 @@ async function fillPlusBillingAddress(payload = {}) {
       await fillFullName(payload.fullName || '');
     }
     return ensureStructuredAddress(seed, {
-      overwrite: useDirectStructuredBranch,
+      overwrite: overwriteStructuredAddress,
       timeoutMs: payload.structuredAddressTimeoutMs,
     });
   });
@@ -2100,6 +2199,7 @@ async function readChatGptSessionAccessToken() {
 
 async function inspectPlusCheckoutState(options = {}) {
   const structuredAddress = getStructuredAddressFields();
+  const checkoutError = inspectVisibleCheckoutError();
   const state = {
     url: location.href,
     readyState: document.readyState,
@@ -2116,6 +2216,8 @@ async function inspectPlusCheckoutState(options = {}) {
     billingFieldsVisible: hasBillingAddressFields(),
     hasSubscribeButton: Boolean(findSubscribeButton()),
     checkoutAmountSummary: getCheckoutAmountSummary(),
+    checkoutErrorText: checkoutError.checkoutErrorText,
+    checkoutErrorCode: checkoutError.checkoutErrorCode,
     addressFieldValues: {
       address1: structuredAddress.address1?.value || '',
       city: structuredAddress.city?.value || '',

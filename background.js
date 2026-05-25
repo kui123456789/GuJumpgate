@@ -249,6 +249,7 @@ const {
   getHotmailMailApiRequestConfig,
   getHotmailVerificationPollConfig,
   getHotmailVerificationRequestTimestamp,
+  isHotmailMailboxAccountUnavailableError,
   normalizeHotmailServiceMode,
   normalizeHotmailMailApiMessages,
   pickHotmailAccountForRun,
@@ -484,6 +485,7 @@ const STOP_ERROR_MESSAGE = '流程已被用户停止。';
 const CLOUDFLARE_SECURITY_BLOCK_ERROR_PREFIX = 'CF_SECURITY_BLOCKED::';
 const CLOUDFLARE_SECURITY_BLOCK_USER_MESSAGE = '您已触发Cloudflare 安全防护系统，已完全停止流程，请不要短时间内多次进行重新发送验证码，连续刷新、反复点击重试会加重风控；请先关闭页面等待 15-30 分钟，让系统的临时限制自动解除。或者更换浏览器';
 const BROWSER_SWITCH_REQUIRED_ERROR_PREFIX = 'BROWSER_SWITCH_REQUIRED::';
+const HOTMAIL_MAILBOX_UNAVAILABLE_PREFIX = 'HOTMAIL_MAILBOX_UNAVAILABLE::';
 const HUMAN_STEP_DELAY_MIN = 700;
 const HUMAN_STEP_DELAY_MAX = 2200;
 const STEP6_MAX_ATTEMPTS = 3;
@@ -3103,6 +3105,8 @@ function normalizePersistentSettingValue(key, value) {
           usedAt: Math.max(0, Number(item.usedAt) || 0),
           lastAttemptAt: Math.max(0, Number(item.lastAttemptAt) || 0),
           lastError: String(item.lastError || '').trim(),
+          blockedAt: Math.max(0, Number(item.blockedAt) || 0),
+          blockedReason: String(item.blockedReason || '').trim(),
         }];
       }).filter(([key]) => Boolean(key)));
     case 'hostedSmsPoolText':
@@ -4937,6 +4941,27 @@ async function patchHotmailAccount(accountId, updates = {}, options = {}) {
   return nextAccount;
 }
 
+async function markHotmailMailboxAccountUnavailable(account = {}, errorMessage = '') {
+  const accountId = String(account?.id || '').trim();
+  if (!accountId) {
+    return false;
+  }
+  const reason = String(errorMessage || 'Hotmail mailbox account unavailable').trim();
+  try {
+    await patchHotmailAccount(accountId, {
+      status: 'error',
+      used: true,
+      lastUsedAt: Date.now(),
+      lastError: reason,
+    });
+    await addLog(`Hotmail/Outlook：账号 ${account.email || account.id} 不可用，已标记为已用并切换下一个邮箱。原因：${reason}`, 'warn');
+    return true;
+  } catch (error) {
+    await addLog(`Hotmail/Outlook：账号 ${account.email || account.id || accountId} 不可用，但标记账号状态失败：${getErrorMessage(error)}`, 'warn');
+    return false;
+  }
+}
+
 async function setCurrentHotmailAccount(accountId, options = {}) {
   const { markUsed = false, syncEmail = true } = options;
   const state = await getState();
@@ -5157,9 +5182,14 @@ function applyHotmailApiResultToAccount(account, apiResult) {
 }
 
 function buildHotmailMailApiFailureAccount(account, errorMessage) {
+  const accountUnavailable = Boolean(isHotmailMailboxAccountUnavailableError?.(errorMessage));
   return normalizeHotmailAccount({
     ...account,
     status: 'error',
+    ...(accountUnavailable ? {
+      used: true,
+      lastUsedAt: Date.now(),
+    } : {}),
     lastError: String(errorMessage || ''),
   });
 }
@@ -5248,6 +5278,9 @@ async function requestHotmailLocalMessages(account, mailboxes = HOTMAIL_MAILBOXE
 
   if (!response.ok || payload?.ok === false) {
     const errorText = payload?.error || payload?.message || text || `HTTP ${response.status}`;
+    if (isHotmailMailboxAccountUnavailableError(errorText)) {
+      await markHotmailMailboxAccountUnavailable(account, errorText);
+    }
     throw new Error(`Hotmail 本地助手返回失败：${errorText}`);
   }
 
@@ -5339,6 +5372,9 @@ async function requestHotmailLocalCode(account, pollPayload = {}) {
 
   if (!response.ok || payload?.ok === false) {
     const errorText = payload?.error || payload?.message || text || `HTTP ${response.status}`;
+    if (isHotmailMailboxAccountUnavailableError(errorText)) {
+      await markHotmailMailboxAccountUnavailable(account, errorText);
+    }
     throw new Error(`Hotmail 本地助手返回失败：${errorText}`);
   }
 
@@ -5393,6 +5429,10 @@ async function pollHotmailVerificationCodeViaLocalHelper(step, account, pollPayl
       await addLog(lastError.message, attempt === maxAttempts ? 'warn' : 'info');
     } catch (err) {
       lastError = err;
+      if (isHotmailMailboxAccountUnavailableError(err)) {
+        await markHotmailMailboxAccountUnavailable(workingAccount, err.message);
+        throw new Error(`${HOTMAIL_MAILBOX_UNAVAILABLE_PREFIX}${err.message}`);
+      }
       await addLog(`步骤 ${step}：本地助手轮询 Hotmail 失败：${err.message}`, 'warn');
     }
 
@@ -5621,6 +5661,10 @@ async function pollHotmailVerificationCode(step, state, pollPayload = {}) {
       }
     } catch (err) {
       lastError = err;
+      if (isHotmailMailboxAccountUnavailableError(err)) {
+        await markHotmailMailboxAccountUnavailable(account, err.message);
+        throw new Error(`${HOTMAIL_MAILBOX_UNAVAILABLE_PREFIX}${err.message}`);
+      }
       await addLog(`步骤 ${step}：Hotmail API 对接轮询失败：${err.message}`, 'warn');
     }
 
@@ -9420,12 +9464,19 @@ const tabRuntime = self.MultiPageBackgroundTabRuntime?.createTabRuntime({
 });
 
 function getErrorMessage(error) {
-  if (typeof loggingStatus !== 'undefined' && loggingStatus?.getErrorMessage) {
-    return loggingStatus.getErrorMessage(error);
-  }
-  return String(typeof error === 'string' ? error : error?.message || '')
+  const message = typeof loggingStatus !== 'undefined' && loggingStatus?.getErrorMessage
+    ? loggingStatus.getErrorMessage(error)
+    : String(typeof error === 'string' ? error : error?.message || '');
+  return String(message || '')
     .replace(/^GPC_TASK_ENDED::/i, '')
+    .replace(new RegExp(`^${HOTMAIL_MAILBOX_UNAVAILABLE_PREFIX}`, 'i'), '')
     .replace(/^AUTO_RUN_STEP_IDLE_RESTART::/i, '');
+}
+
+function isHotmailMailboxUnavailableFailure(error) {
+  const rawMessage = String(typeof error === 'string' ? error : error?.message || '');
+  return rawMessage.startsWith(HOTMAIL_MAILBOX_UNAVAILABLE_PREFIX)
+    || Boolean(isHotmailMailboxAccountUnavailableError?.(error));
 }
 
 function isCloudflareSecurityBlockedError(error) {
@@ -13322,6 +13373,21 @@ async function runAutoSequenceFromNodeGraph(startNodeId, context = {}) {
       if (nodeId === 'fetch-signup-code') {
         if (isSignupUserAlreadyExistsFailure(err)) {
           throw err;
+        }
+        if (isHotmailMailboxUnavailableFailure(err)) {
+          step4RestartCount += 1;
+          const reason = getErrorMessage(err);
+          await addLog(
+            `节点 fetch-signup-code：Hotmail 当前邮箱不可用，准备切换下一个邮箱重新开始（第 ${step4RestartCount} 次重开）。原因：${reason}`,
+            'warn'
+          );
+          await invalidateDownstreamAfterAutoRunNodeRestart('open-chatgpt', {
+            logLabel: `节点 fetch-signup-code 检测到 Hotmail 邮箱不可用，准备切换下一个邮箱重试（第 ${step4RestartCount} 次重开）`,
+          });
+          await setEmailState(null);
+          setRestartNode('open-chatgpt');
+          restartFromStep1WithCurrentEmail = true;
+          break;
         }
         if (isMail2925ThreadTerminatedError(err)) {
           await addLog(`节点 fetch-signup-code：2925 已切换账号并要求结束当前尝试：${getErrorMessage(err)}`, 'warn');

@@ -141,6 +141,20 @@
     return Boolean(account) && account.used === true;
   }
 
+  function isHotmailMailboxAccountUnavailableError(errorLike = '') {
+    const message = normalizeText(
+      typeof errorLike === 'string'
+        ? errorLike
+        : errorLike?.message || ''
+    );
+    if (!message) {
+      return false;
+    }
+    return /aadsts70000/.test(message)
+      || /service\s+abuse\s+mode/.test(message)
+      || /user\s+account\s+is\s+found\s+to\s+be\s+in\s+service\s+abuse\s+mode/.test(message);
+  }
+
   function upsertHotmailAccountInList(accounts, nextAccount) {
     const list = Array.isArray(accounts) ? accounts.slice() : [];
     if (!nextAccount?.id) return list;
@@ -602,6 +616,7 @@
     getHotmailAliasEntriesForAccount,
     getHotmailAliasUsageKey,
     isAuthorizedHotmailAccount,
+    isHotmailMailboxAccountUnavailableError,
     isHotmailAliasCapacityExhausted,
     buildOutlookPlusAliasEmail,
     findSubscriptionMessageForAlias,
