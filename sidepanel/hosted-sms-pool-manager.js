@@ -8,9 +8,24 @@
       state = {},
       actions = {},
       constants = {},
+      labels: customLabels = {},
     } = context;
 
     const copyIcon = constants.copyIcon || '';
+    const labels = {
+      emptyList: '还没有 PayPal 号码，先导入一批号码再开始。',
+      emptySummary: '导入 PayPal 接码号码，每行一个号码和验证码接口。',
+      localPhonePrefix: 'PayPal 填',
+      deleteEntryTitle: '删除 PayPal 号码',
+      updateLoading: '正在更新 PayPal 号池...',
+      updateFailed: '更新 PayPal 号池失败',
+      importEmpty: '请先粘贴 PayPal 号码，每行一个号码和验证码接口。',
+      clearUsedMessage: '确认清空 PayPal 号池的使用次数吗？号码本身会保留。',
+      deleteAllTitle: '删除 PayPal 号池',
+      deleteAllMessage: '确认删除当前全部 PayPal 号码吗？此操作不可撤销。',
+      refreshLoading: '正在刷新 PayPal 号池...',
+      ...customLabels,
+    };
     let renderedEntries = [];
     let searchTerm = '';
     let filterMode = 'all';
@@ -59,7 +74,7 @@
       }
     }
 
-    function formatPayPalLocalPhone(value = '') {
+    function formatLocalPhone(value = '') {
       return normalizeUsHostedPhoneDigits(value);
     }
 
@@ -211,8 +226,8 @@
 
       const entriesWithState = getEntriesWithState(renderedEntries);
       if (!entriesWithState.length) {
-        dom.hostedSmsPoolList.innerHTML = '<div class="luckmail-empty">还没有 PayPal 号码，先导入一批号码再开始。</div>';
-        dom.hostedSmsPoolSummary.textContent = '导入 PayPal 接码号码，每行一个号码和验证码接口。';
+        dom.hostedSmsPoolList.innerHTML = `<div class="luckmail-empty">${helpers.escapeHtml?.(labels.emptyList) || labels.emptyList}</div>`;
+        dom.hostedSmsPoolSummary.textContent = labels.emptySummary;
         updateControls([]);
         return;
       }
@@ -231,14 +246,14 @@
       for (const entry of visibleEntries) {
         const item = document.createElement('div');
         item.className = `luckmail-item${entry.current ? ' is-current' : ''}`;
-        const localPhone = formatPayPalLocalPhone(entry.phone);
+        const localPhone = formatLocalPhone(entry.phone);
         item.innerHTML = `
           <div class="luckmail-item-main">
             <div class="luckmail-item-email-row">
               <div class="luckmail-item-email hosted-sms-pool-phone">
                 <span>${helpers.escapeHtml?.(entry.phone) || entry.phone}</span>
                 ${entry.current ? '<span class="hosted-sms-pool-current-label">当前</span>' : ''}
-                ${localPhone && localPhone !== entry.phone ? `<span class="hosted-sms-pool-phone-local">PayPal 填 ${helpers.escapeHtml?.(localPhone) || localPhone}</span>` : ''}
+                ${localPhone && localPhone !== entry.phone ? `<span class="hosted-sms-pool-phone-local">${helpers.escapeHtml?.(labels.localPhonePrefix) || labels.localPhonePrefix} ${helpers.escapeHtml?.(localPhone) || localPhone}</span>` : ''}
               </div>
               <button
                 class="hotmail-copy-btn"
@@ -295,7 +310,7 @@
 
         item.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
           const confirmed = await helpers.openConfirmModal?.({
-            title: '删除 PayPal 号码',
+            title: labels.deleteEntryTitle,
             message: `确认删除 ${entry.phone} 吗？此操作不可撤销。`,
             confirmLabel: '确认删除',
             confirmVariant: 'btn-danger',
@@ -329,7 +344,7 @@
       const nextUsage = normalizeUsage(result.usage || previousUsage);
       const nextText = entriesToText(nextEntries);
 
-      setLoading(true, '正在更新 PayPal 号池...');
+      setLoading(true, labels.updateLoading);
       state.setText?.(nextText);
       state.setUsage?.(nextUsage);
       render(nextEntries);
@@ -340,7 +355,7 @@
         state.setText?.(previousText);
         state.setUsage?.(previousUsage);
         render(previousEntries);
-        helpers.showToast?.(`更新 PayPal 号池失败：${error.message}`, 'error');
+        helpers.showToast?.(`${labels.updateFailed}：${error.message}`, 'error');
         return false;
       } finally {
         setLoading(false);
@@ -350,7 +365,7 @@
     async function importEntries() {
       const text = normalizePoolText(dom.inputHostedSmsPoolImport?.value || '');
       if (!text) {
-        helpers.showToast?.('请先粘贴 PayPal 号码，每行一个号码和验证码接口。', 'warn');
+        helpers.showToast?.(labels.importEmpty, 'warn');
         return;
       }
 
@@ -393,7 +408,7 @@
     async function clearUsedState() {
       const confirmed = await helpers.openConfirmModal?.({
         title: '清空使用次数',
-        message: '确认清空 PayPal 号池的使用次数吗？号码本身会保留。',
+        message: labels.clearUsedMessage,
         confirmLabel: '清空次数',
       });
       if (!confirmed) return;
@@ -402,8 +417,8 @@
 
     async function deleteAll() {
       const confirmed = await helpers.openConfirmModal?.({
-        title: '删除 PayPal 号池',
-        message: '确认删除当前全部 PayPal 号码吗？此操作不可撤销。',
+        title: labels.deleteAllTitle,
+        message: labels.deleteAllMessage,
         confirmLabel: '确认删除',
         confirmVariant: 'btn-danger',
       });
@@ -416,7 +431,7 @@
       if (state.isVisible && !state.isVisible()) {
         return;
       }
-      if (!silent) setLoading(true, '正在刷新 PayPal 号池...');
+      if (!silent) setLoading(true, labels.refreshLoading);
       render(parseEntries(state.getText?.()));
       if (!silent) setLoading(false);
     }
@@ -464,7 +479,7 @@
       if (dom.selectHostedSmsPoolFilter) dom.selectHostedSmsPoolFilter.value = 'all';
       if (dom.hostedSmsPoolList) dom.hostedSmsPoolList.innerHTML = '';
       if (dom.hostedSmsPoolSummary) {
-        dom.hostedSmsPoolSummary.textContent = '导入 PayPal 接码号码，每行一个号码和验证码接口。';
+        dom.hostedSmsPoolSummary.textContent = labels.emptySummary;
       }
       updateControls([]);
     }

@@ -190,8 +190,9 @@
           { id: id + 3, order: order + 30, key: 'fetch-bind-email-code', title: '获取绑定邮箱验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fetch-bind-email-code', mailRuleId: 'openai-login-code' },
           { id: id + 4, order: order + 40, key: 'relogin-bound-email', title: '绑定邮箱后刷新 OAuth 并登录（邮箱）', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'oauth-login' },
           { id: id + 5, order: order + 50, key: 'fetch-bound-email-login-code', title: '获取登录验证码（邮箱）', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-login-code' },
-          { id: id + 6, order: order + 60, key: 'confirm-oauth', title: '自动确认 OAuth', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'confirm-oauth' },
-          { id: id + 7, order: order + 70, key: 'platform-verify', title: '平台回调验证', sourceId: 'platform-panel', driverId: 'content/platform-panel', command: 'platform-verify' },
+          { id: id + 6, order: order + 60, key: 'post-bound-email-phone-verification', title: '手机号验证', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'post-login-phone-verification' },
+          { id: id + 7, order: order + 70, key: 'confirm-oauth', title: '自动确认 OAuth', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'confirm-oauth' },
+          { id: id + 8, order: order + 80, key: 'platform-verify', title: '平台回调验证', sourceId: 'platform-panel', driverId: 'content/platform-panel', command: 'platform-verify' },
         ];
       }
       return [
@@ -205,8 +206,9 @@
 
     return [
       ...commonStart,
-      { id: id + 2, order: order + 20, key: 'confirm-oauth', title: '自动确认 OAuth', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'confirm-oauth' },
-      { id: id + 3, order: order + 30, key: 'platform-verify', title: '平台回调验证', sourceId: 'platform-panel', driverId: 'content/platform-panel', command: 'platform-verify' },
+      { id: id + 2, order: order + 20, key: 'post-login-phone-verification', title: '手机号验证', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'post-login-phone-verification' },
+      { id: id + 3, order: order + 30, key: 'confirm-oauth', title: '自动确认 OAuth', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'confirm-oauth' },
+      { id: id + 4, order: order + 40, key: 'platform-verify', title: '平台回调验证', sourceId: 'platform-panel', driverId: 'content/platform-panel', command: 'platform-verify' },
     ];
   }
 

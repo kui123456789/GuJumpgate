@@ -11,6 +11,7 @@ importScripts(
   'gopay-utils.js',
   'phone-sms/providers/hero-sms.js',
   'phone-sms/providers/five-sim.js',
+  'phone-sms/providers/hosted-sms.js',
   'phone-sms/providers/registry.js',
   'background/phone-verification-flow.js',
   'background/account-run-history.js',
@@ -428,6 +429,20 @@ function statePatchHasChanges(state = {}, patch = {}) {
 }
 
 const LOG_PREFIX = '[MultiPage:bg]';
+
+function isTransientNoServiceWorkerError(error) {
+  const message = getErrorMessage(error);
+  return /^No SW$/i.test(message) || /\bNo SW\b/i.test(message);
+}
+
+function handleBackgroundStartupError(action, error) {
+  if (isTransientNoServiceWorkerError(error)) {
+    console.debug(LOG_PREFIX, `Skipped ${action}: service worker was no longer active.`);
+    return;
+  }
+  console.error(LOG_PREFIX, `Failed to ${action}:`, error);
+}
+
 const DUCK_AUTOFILL_URL = 'https://duckduckgo.com/email/settings/autofill';
 const ICLOUD_SETUP_URLS = [
   'https://setup.icloud.com/setup/ws/1',
@@ -609,11 +624,13 @@ const PHONE_SMS_PROVIDER_5SIM = '5sim';
 const PHONE_SMS_PROVIDER_HERO_SMS = PHONE_SMS_PROVIDER_HERO;
 const PHONE_SMS_PROVIDER_FIVE_SIM = PHONE_SMS_PROVIDER_5SIM;
 const PHONE_SMS_PROVIDER_NEXSMS = 'nexsms';
+const PHONE_SMS_PROVIDER_HOSTED_SMS = 'hosted-sms';
 const DEFAULT_PHONE_SMS_PROVIDER = PHONE_SMS_PROVIDER_HERO;
 const DEFAULT_PHONE_SMS_PROVIDER_ORDER = Object.freeze([
   PHONE_SMS_PROVIDER_HERO,
   PHONE_SMS_PROVIDER_5SIM,
   PHONE_SMS_PROVIDER_NEXSMS,
+  PHONE_SMS_PROVIDER_HOSTED_SMS,
 ]);
 const DEFAULT_FIVE_SIM_BASE_URL = 'https://5sim.net/v1';
 const DEFAULT_FIVE_SIM_PRODUCT = 'openai';
@@ -1145,6 +1162,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   nexSmsApiKey: '',
   nexSmsCountryOrder: [...DEFAULT_NEX_SMS_COUNTRY_ORDER],
   nexSmsServiceCode: DEFAULT_NEX_SMS_SERVICE_CODE,
+  hostedSmsPoolText: '',
+  hostedSmsPoolUsage: {},
   phonePreferredActivation: null,
 };
 
@@ -1198,6 +1217,7 @@ const DEFAULT_STATE = {
   plusCheckoutCurrency: 'EUR',
   plusCheckoutSource: '',
   hostedCheckoutCurrentSmsEntry: null,
+  hostedSmsCurrentEntry: null,
   plusBillingCountryText: '',
   plusBillingAddress: null,
   plusPaypalApprovedAt: null,
@@ -1647,6 +1667,9 @@ function normalizePhoneSmsProvider(value = '') {
   }
   if (normalized === PHONE_SMS_PROVIDER_NEXSMS) {
     return PHONE_SMS_PROVIDER_NEXSMS;
+  }
+  if (normalized === PHONE_SMS_PROVIDER_HOSTED_SMS) {
+    return PHONE_SMS_PROVIDER_HOSTED_SMS;
   }
   return PHONE_SMS_PROVIDER_HERO_SMS;
 }
@@ -3081,6 +3104,32 @@ function normalizePersistentSettingValue(key, value) {
           lastError: String(item.lastError || '').trim(),
         }];
       }).filter(([key]) => Boolean(key)));
+    case 'hostedSmsPoolText':
+      return String(value || '')
+        .replace(/\r/g, '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join('\n');
+    case 'hostedSmsPoolUsage':
+      if (self.PhoneSmsHostedSmsProvider?.normalizeHostedSmsPoolUsage) {
+        return self.PhoneSmsHostedSmsProvider.normalizeHostedSmsPoolUsage(value);
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+      }
+      return Object.fromEntries(Object.entries(value).map(([key, usage]) => {
+        const item = usage && typeof usage === 'object' && !Array.isArray(usage) ? usage : {};
+        return [String(key || '').trim(), {
+          useCount: Math.max(0, Math.floor(Number(item.useCount) || 0)),
+          usedAt: Math.max(0, Number(item.usedAt) || 0),
+          lastAttemptAt: Math.max(0, Number(item.lastAttemptAt) || 0),
+          lastSuccessAt: Math.max(0, Number(item.lastSuccessAt) || 0),
+          lastCancelAt: Math.max(0, Number(item.lastCancelAt) || 0),
+          lastBanAt: Math.max(0, Number(item.lastBanAt) || 0),
+          lastError: String(item.lastError || '').trim(),
+        }];
+      }).filter(([key]) => Boolean(key)));
     case 'paypalEmail':
       return String(value || '').trim();
     case 'paypalPassword':
@@ -3627,6 +3676,14 @@ async function setState(updates) {
         hostedCheckoutSmsPoolUsage: normalizePersistentSettingValue(
           'hostedCheckoutSmsPoolUsage',
           sessionUpdates.hostedCheckoutSmsPoolUsage
+        ),
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(sessionUpdates, 'hostedSmsPoolUsage')) {
+      await chrome.storage.local.set({
+        hostedSmsPoolUsage: normalizePersistentSettingValue(
+          'hostedSmsPoolUsage',
+          sessionUpdates.hostedSmsPoolUsage
         ),
       });
     }
@@ -13606,6 +13663,7 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
   sleepWithStop,
   throwIfStopped,
   createFiveSimProvider: self.PhoneSmsFiveSimProvider?.createProvider,
+  createHostedSmsProvider: self.PhoneSmsHostedSmsProvider?.createProvider,
 });
 const step1Executor = self.MultiPageBackgroundStep1?.createStep1Executor({
   addLog,
@@ -15820,7 +15878,9 @@ async function executeStep10(state) {
 // Open Side Panel on extension icon click
 // ============================================================
 
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+  handleBackgroundStartupError('set side panel behavior', err);
+});
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === AUTO_RUN_TIMER_ALARM_NAME) {
@@ -15844,25 +15904,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.runtime.onStartup.addListener(() => {
   restoreAutoRunTimerIfNeeded().catch((err) => {
-    console.error(LOG_PREFIX, 'Failed to restore auto run timer on startup:', err);
+    handleBackgroundStartupError('restore auto run timer on startup', err);
   });
   disableLegacyIpProxyFeatureRuntime().catch((err) => {
-    console.error(LOG_PREFIX, 'Failed to disable legacy IP proxy feature on startup:', err);
+    handleBackgroundStartupError('disable legacy IP proxy feature on startup', err);
   });
 });
 
 chrome.runtime.onInstalled.addListener(() => {
   restoreAutoRunTimerIfNeeded().catch((err) => {
-    console.error(LOG_PREFIX, 'Failed to restore auto run timer on install/update:', err);
+    handleBackgroundStartupError('restore auto run timer on install/update', err);
   });
   disableLegacyIpProxyFeatureRuntime().catch((err) => {
-    console.error(LOG_PREFIX, 'Failed to disable legacy IP proxy feature on install/update:', err);
+    handleBackgroundStartupError('disable legacy IP proxy feature on install/update', err);
   });
 });
 
 restoreAutoRunTimerIfNeeded().catch((err) => {
-  console.error(LOG_PREFIX, 'Failed to restore auto run timer:', err);
+  handleBackgroundStartupError('restore auto run timer', err);
 });
 disableLegacyIpProxyFeatureRuntime().catch((err) => {
-  console.error(LOG_PREFIX, 'Failed to disable legacy IP proxy feature:', err);
+  handleBackgroundStartupError('disable legacy IP proxy feature', err);
 });

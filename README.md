@@ -128,6 +128,16 @@
 
 ![填写验证码接口](docs/images/readme-verification-url.webp)
 
+#### OAuth 手机号接码
+
+如果 OAuth 后链进入手机号验证，可在接码设置里选择“托管短信接口”，并在托管号码池中按行填写：
+
+```text
+2092905100----https://example.test/api/sms/recordText?key=replace-me
+```
+
+10 位号码会按美国 `+1` 本地号提交。该配置只用于 Auth/OAuth 后置 `add-phone / phone-verification`，不复用 PayPal 接码号码池。
+
 #### PAYPAL 接码电话
 
 填写 PayPal 接码电话，注意按扩展提示填写格式。

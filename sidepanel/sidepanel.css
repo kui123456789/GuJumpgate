@@ -5,8 +5,7 @@
    Themes: Light (default) + Dark (toggle)
    ============================================================ */
 
-#ip-proxy-section,
-#phone-verification-section {
+#ip-proxy-section {
   display: none !important;
 }
 
@@ -857,6 +856,24 @@ header {
 
 .phone-verification-card {
   margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+#settings-card > #phone-verification-section.module-divider-start {
+  position: relative;
+  margin-top: 10px;
+  padding-top: 12px;
+}
+
+#settings-card > #phone-verification-section.module-divider-start::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
 }
 
 .phone-verification-header-actions {

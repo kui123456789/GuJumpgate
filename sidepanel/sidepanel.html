@@ -1443,7 +1443,7 @@
     <div id="phone-verification-section" class="data-card phone-verification-card">
       <div class="section-mini-header">
         <div class="section-mini-copy">
-          <span class="section-label">接码设置</span>
+          <span class="section-label">手机号验证接码</span>
           <span class="data-value"></span>
         </div>
         <div id="row-phone-verification-enabled" class="section-mini-actions phone-verification-header-actions">
@@ -1489,6 +1489,7 @@
                 <option value="hero-sms">HeroSMS</option>
                 <option value="5sim">5sim</option>
                 <option value="nexsms">NexSMS</option>
+                <option value="hosted-sms">托管短信接口</option>
               </select>
             </div>
             <div class="data-row" id="row-phone-sms-provider-order" style="display:none;">
@@ -1498,6 +1499,7 @@
                   <option value="hero-sms" selected>HeroSMS</option>
                   <option value="5sim" selected>5sim</option>
                   <option value="nexsms" selected>NexSMS</option>
+                  <option value="hosted-sms">托管短信接口</option>
                 </select>
                 <div class="hero-sms-country-mainline">
                   <div id="phone-sms-provider-order-menu-shell" class="hero-sms-country-menu">
@@ -1520,6 +1522,61 @@
             <div class="data-row" id="row-hero-sms-platform" style="display:none;">
               <span class="data-label">接码平台</span>
               <span id="display-hero-sms-platform" class="data-value mono">HeroSMS / OpenAI / Thailand</span>
+            </div>
+            <div class="data-row" id="row-hosted-sms-auth-verification-url" style="display:none;">
+              <span class="data-label">验证码接口</span>
+              <input type="text" id="input-hosted-sms-auth-verification-url" class="data-input"
+                placeholder="https://example.test/api/sms/recordText?key=replace-me"
+                title="只填基础接口地址，不需要带 ?t= 时间戳参数" />
+            </div>
+            <div class="data-row" id="row-hosted-sms-auth-phone" style="display:none;">
+              <span class="data-label">手机号(不带+1)</span>
+              <input type="text" id="input-hosted-sms-auth-phone" class="data-input mono"
+                inputmode="tel" autocomplete="off" placeholder="2092905100" />
+            </div>
+            <div class="data-row data-check-row" id="row-hosted-sms-auth-pool" style="display:none;">
+              <span class="data-label">托管号码池</span>
+              <div class="hotmail-import-box hosted-sms-pool-box">
+                <textarea id="input-hosted-sms-auth-pool" class="data-textarea mono" hidden
+                  placeholder="2092905100----https://example.test/api/sms/recordText?key=replace-me"></textarea>
+                <div class="section-mini-header">
+                  <div class="section-mini-copy">
+                    <span class="section-label">托管短信号池</span>
+                    <span class="data-value">美国本地号和验证码接口按行绑定</span>
+                  </div>
+                  <div class="section-mini-actions">
+                    <button id="btn-toggle-hosted-sms-auth-pool" class="btn btn-ghost btn-xs" type="button"
+                      aria-expanded="false">展开</button>
+                  </div>
+                </div>
+                <div id="hosted-sms-auth-pool-shell" class="hosted-sms-pool-shell is-collapsed" hidden>
+                  <div class="section-mini-actions hosted-sms-pool-toolbar">
+                    <button id="btn-hosted-sms-auth-pool-refresh" class="btn btn-ghost btn-xs" type="button">刷新</button>
+                    <button id="btn-hosted-sms-auth-pool-clear-used" class="btn btn-ghost btn-xs" type="button">清空次数</button>
+                    <button id="btn-hosted-sms-auth-pool-delete-all" class="btn btn-ghost btn-xs" type="button">全部删除</button>
+                  </div>
+                  <textarea id="input-hosted-sms-auth-pool-import" class="data-textarea mono" rows="4"
+                    placeholder="2092905100----https://example.test/api/sms/recordText?key=replace-me"></textarea>
+                  <div class="data-inline">
+                    <button id="btn-hosted-sms-auth-pool-import" class="btn btn-primary btn-sm" type="button">导入号码</button>
+                  </div>
+                  <div class="icloud-card">
+                    <div id="hosted-sms-auth-pool-summary" class="icloud-summary">导入 Auth 手机验证号码，每行一个号码和验证码接口。</div>
+                    <div class="icloud-toolbar">
+                      <input id="input-hosted-sms-auth-pool-search" class="data-input icloud-search" type="text"
+                        placeholder="搜索号码 / 接口" />
+                      <select id="select-hosted-sms-auth-pool-filter" class="data-select icloud-filter">
+                        <option value="all">全部</option>
+                        <option value="current">当前</option>
+                        <option value="unused">0 次</option>
+                        <option value="used">已使用</option>
+                        <option value="error">异常</option>
+                      </select>
+                    </div>
+                    <div id="hosted-sms-auth-pool-list" class="luckmail-list"></div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="data-row" id="row-hero-sms-country" style="display:none;">
               <span class="data-label">国家优先级</span>
@@ -1924,6 +1981,7 @@
   <script src="../gopay-utils.js"></script>
   <script src="../phone-sms/providers/hero-sms.js"></script>
   <script src="../phone-sms/providers/five-sim.js"></script>
+  <script src="../phone-sms/providers/hosted-sms.js"></script>
   <script src="../phone-sms/providers/registry.js"></script>
   <script src="../icloud-utils.js"></script>
   <script src="../mail-provider-utils.js"></script>
