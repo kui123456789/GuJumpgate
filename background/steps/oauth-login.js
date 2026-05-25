@@ -168,8 +168,13 @@
       return /缺少登录账号|登录时缺少邮箱地址或手机号|missing\s+(?:login\s+)?(?:account|email|phone)/i.test(message);
     }
 
+    function isStep7SmsOauthFlowState(state = {}) {
+      return String(state?.plusAccountAccessStrategy || '').trim().toLowerCase() === 'sms_oauth';
+    }
+
     function buildStep7CompletionPayload(result = {}, currentState = {}, currentIdentifierType = '', currentPhoneNumber = '') {
       const phoneSignupMode = currentIdentifierType === 'phone';
+      const smsOauthFlow = isStep7SmsOauthFlowState(currentState);
       const payload = {
         loginVerificationRequestedAt: result.loginVerificationRequestedAt || null,
       };
@@ -204,6 +209,12 @@
           throw new Error(`步骤 ${completionStepForState(currentState)}：手机号注册模式 OAuth 登录进入了普通邮箱登录验证码页，当前流程不会回落到邮箱验证码。URL: ${result?.url || ''}`.trim());
         }
         throw new Error(`步骤 ${completionStepForState(currentState)}：手机号注册模式 OAuth 登录进入了不允许的页面：${getLoginAuthStateLabel(result.state)}。URL: ${result?.url || ''}`.trim());
+      }
+
+      if (isStep7AddEmailResult(result) && smsOauthFlow) {
+        payload.skipLoginVerificationStep = true;
+        payload.addEmailPage = true;
+        return payload;
       }
 
       if (isStep7AddEmailResult(result)) {
