@@ -30,6 +30,7 @@ function extractFunction(functionName) {
 }
 
 const isPhoneNumberUsedError = vm.runInNewContext(`(${extractFunction('isPhoneNumberUsedError')})`);
+const isPhoneNumberVirtualPhoneError = vm.runInNewContext(`(${extractFunction('isPhoneNumberVirtualPhoneError')})`);
 
 test('phone verification treats max-associated Chinese add-phone rejection as used number', () => {
   [
@@ -47,4 +48,21 @@ test('phone verification does not classify delivery errors as used numbers', () 
     isPhoneNumberUsedError('无法向此电话号码发送验证码，请尝试其他号码。'),
     false
   );
+});
+
+test('phone verification classifies virtual or VoIP add-phone rejection separately from used numbers', () => {
+  [
+    '这似乎是个虚拟号码（也称为 VoIP）。请提供有效的非虚拟电话号码以继续。',
+    'This appears to be a virtual phone number, also known as VoIP. Please provide a valid non-virtual phone number to continue.',
+    'Please provide a non virtual phone number.',
+  ].forEach((message) => {
+    assert.equal(isPhoneNumberVirtualPhoneError(message), true, message);
+    assert.equal(isPhoneNumberUsedError(message), false, message);
+  });
+});
+
+test('phone verification rotates add-phone virtual number rejections', () => {
+  assert.match(source, /isPhoneNumberVirtualPhoneError\(addPhoneRejectText\)/);
+  assert.match(source, /isPhoneNumberVirtualPhoneError\(retryRejectText\)/);
+  assert.match(source, /phone_virtual_number/);
 });

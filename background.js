@@ -50,7 +50,6 @@ importScripts(
   'background/steps/submit-signup-email.js',
   'background/steps/fill-password.js',
   'background/steps/fetch-signup-code.js',
-  'background/steps/skip-passkey-enrollment.js',
   'background/steps/fill-profile.js',
   'background/steps/wait-registration-success.js',
   'background/steps/create-plus-checkout.js',
@@ -679,6 +678,8 @@ const DEFAULT_NEX_SMS_SERVICE_CODE = 'ot';
 const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([1]);
 const DEFAULT_SMSBOWER_BASE_URL = 'https://smsbower.page/stubs/handler_api.php';
 const DEFAULT_SMSBOWER_SERVICE_CODE = 'dr';
+const DEFAULT_SMS_BOWER_SERVICE_CODE = DEFAULT_SMSBOWER_SERVICE_CODE;
+const DEFAULT_SMS_BOWER_COUNTRY_ORDER = Object.freeze([187, 7, 38, 52]);
 const DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL = 'https://sms-verification-number.com/stubs/handler_api';
 const DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE = 'dr';
 const DEFAULT_GRIZZLY_SMS_BASE_URL = 'https://api.grizzlysms.com/stubs/handler_api.php';
@@ -1227,17 +1228,18 @@ const PERSISTED_SETTING_DEFAULTS = {
   nexSmsApiKey: '',
   nexSmsCountryOrder: [...DEFAULT_NEX_SMS_COUNTRY_ORDER],
   nexSmsServiceCode: DEFAULT_NEX_SMS_SERVICE_CODE,
-  hostedSmsPoolText: '',
-  hostedSmsPoolUsage: {},
   smsBowerApiKey: '',
+  smsBowerCountryOrder: [...DEFAULT_SMS_BOWER_COUNTRY_ORDER],
   smsBowerBaseUrl: DEFAULT_SMSBOWER_BASE_URL,
   smsBowerServiceCode: DEFAULT_SMSBOWER_SERVICE_CODE,
-  smsBowerCountryId: HERO_SMS_COUNTRY_ID,
-  smsBowerCountryLabel: HERO_SMS_COUNTRY_LABEL,
+  smsBowerCountryId: 187,
+  smsBowerCountryLabel: '美国 +1 (United States)',
   smsBowerCountryFallback: [],
   smsBowerMinPrice: '',
   smsBowerMaxPrice: '',
   smsBowerPreferredPrice: '',
+  hostedSmsPoolText: '',
+  hostedSmsPoolUsage: {},
   smsVerificationNumberApiKey: '',
   smsVerificationNumberBaseUrl: DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL,
   smsVerificationNumberServiceCode: DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE,
@@ -1875,11 +1877,11 @@ function normalizePhoneSmsProvider(value = '') {
   if (normalized === PHONE_SMS_PROVIDER_NEXSMS) {
     return PHONE_SMS_PROVIDER_NEXSMS;
   }
-  if (normalized === PHONE_SMS_PROVIDER_HOSTED_SMS) {
-    return PHONE_SMS_PROVIDER_HOSTED_SMS;
-  }
   if (normalized === PHONE_SMS_PROVIDER_SMSBOWER) {
     return PHONE_SMS_PROVIDER_SMSBOWER;
+  }
+  if (normalized === PHONE_SMS_PROVIDER_HOSTED_SMS) {
+    return PHONE_SMS_PROVIDER_HOSTED_SMS;
   }
   if (normalized === PHONE_SMS_PROVIDER_SMS_VERIFICATION_NUMBER) {
     return PHONE_SMS_PROVIDER_SMS_VERIFICATION_NUMBER;
@@ -2221,6 +2223,70 @@ function normalizeNexSmsServiceCode(value = '', fallback = DEFAULT_NEX_SMS_SERVI
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '');
   return fallbackNormalized || DEFAULT_NEX_SMS_SERVICE_CODE;
+}
+
+function normalizeSmsBowerCountryId(value, fallback = 187) {
+  const rootScope = typeof self !== 'undefined' ? self : globalThis;
+  if (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId) {
+    return rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(value, fallback);
+  }
+  const parsed = Math.floor(Number(value));
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  const fallbackParsed = Math.floor(Number(fallback));
+  return Number.isFinite(fallbackParsed) && fallbackParsed > 0 ? fallbackParsed : 187;
+}
+
+function normalizeSmsBowerCountryOrder(value = []) {
+  const rootScope = typeof self !== 'undefined' ? self : globalThis;
+  if (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryOrder) {
+    return rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryOrder(value);
+  }
+  const source = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(/[\r\n,，;；]+/)
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  const normalized = [];
+  const seen = new Set();
+  source.forEach((entry) => {
+    const id = normalizeSmsBowerCountryId(
+      entry && typeof entry === 'object' && !Array.isArray(entry)
+        ? (entry.id || entry.countryId || entry.country || '')
+        : entry,
+      0
+    );
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    normalized.push(id);
+  });
+  if (normalized.length) {
+    return normalized.slice(0, 10);
+  }
+  return [...DEFAULT_SMS_BOWER_COUNTRY_ORDER];
+}
+
+function normalizeSmsBowerServiceCode(value = '', fallback = DEFAULT_SMS_BOWER_SERVICE_CODE) {
+  const rootScope = typeof self !== 'undefined' ? self : globalThis;
+  if (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode) {
+    return rootScope.PhoneSmsBowerProvider.normalizeSmsBowerServiceCode(value, fallback);
+  }
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '');
+  if (normalized) {
+    return normalized;
+  }
+  const fallbackNormalized = String(fallback || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '');
+  return fallbackNormalized || DEFAULT_SMS_BOWER_SERVICE_CODE;
 }
 
 function normalizePhonePreferredActivation(value) {
@@ -3856,17 +3922,19 @@ function normalizePersistentSettingValue(key, value) {
       return String(value || '');
     case 'smsBowerBaseUrl':
       return normalizeUrl(value, DEFAULT_SMSBOWER_BASE_URL);
+    case 'smsBowerCountryOrder':
+      return normalizeSmsBowerCountryOrder(value);
     case 'smsBowerServiceCode':
-      return normalizeNexSmsServiceCode(value, DEFAULT_SMSBOWER_SERVICE_CODE);
+      return normalizeSmsBowerServiceCode(value, DEFAULT_SMSBOWER_SERVICE_CODE);
     case 'smsBowerCountryId': {
       const parsed = Math.floor(Number(value));
       if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
       }
-      return HERO_SMS_COUNTRY_ID;
+      return 187;
     }
     case 'smsBowerCountryLabel':
-      return String(value || HERO_SMS_COUNTRY_LABEL).trim() || HERO_SMS_COUNTRY_LABEL;
+      return String(value || '美国 +1 (United States)').trim() || '美国 +1 (United States)';
     case 'smsBowerCountryFallback':
       return normalizeHeroSmsCountryFallback(value);
     case 'smsBowerMinPrice':
@@ -11587,13 +11655,12 @@ const AUTO_RUN_STEP_IDLE_LOG_CHECK_INTERVAL_MS = 5000;
 const HOSTED_CHECKOUT_FINAL_WAIT_TIMEOUT_MS = 30 * 60 * 1000;
 const AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS = 3;
 const AUTO_RUN_STEP_IDLE_RESTART_ERROR_PREFIX = 'AUTO_RUN_STEP_IDLE_RESTART::';
-const AUTO_RUN_BACKGROUND_COMPLETED_STEPS = new Set([1, 2, 4, 45, 6, 7, 8, 9]);
+const AUTO_RUN_BACKGROUND_COMPLETED_STEPS = new Set([1, 2, 4, 6, 7, 8, 9]);
 const STEP_COMPLETION_SIGNAL_STEPS = new Set([3, 5, 10, 12]);
 const AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS = new Set([
   'open-chatgpt',
   'submit-signup-email',
   'fetch-signup-code',
-  'skip-passkey-enrollment',
   'wait-registration-success',
   'local-cpa-json-export',
   'plus-checkout-billing',
@@ -14271,6 +14338,8 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
   DEFAULT_NEX_SMS_SERVICE_CODE,
   DEFAULT_SMSBOWER_BASE_URL,
   DEFAULT_SMSBOWER_SERVICE_CODE,
+  DEFAULT_SMS_BOWER_COUNTRY_ORDER,
+  DEFAULT_SMS_BOWER_SERVICE_CODE,
   DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL,
   DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE,
   DEFAULT_SMSPOOL_BASE_URL,
@@ -14320,9 +14389,9 @@ const phoneVerificationHelpers = self.MultiPageBackgroundPhoneVerification?.crea
   sleepWithStop,
   throwIfStopped,
   createFiveSimProvider: self.PhoneSmsFiveSimProvider?.createProvider,
+  createSmsBowerProvider: self.PhoneSmsBowerProvider?.createProvider,
   createHostedSmsProvider: self.PhoneSmsHostedSmsProvider?.createProvider,
   createNexSmsProvider: self.PhoneSmsNexSmsProvider?.createProvider,
-  createSmsBowerProvider: self.PhoneSmsBowerProvider?.createProvider,
   createSmsVerificationNumberProvider: self.PhoneSmsVerificationNumberProvider?.createProvider,
   createGrizzlySmsProvider: self.PhoneSmsGrizzlySmsProvider?.createProvider,
   createSmsPoolProvider: self.PhoneSmsPoolProvider?.createProvider,
@@ -14402,15 +14471,6 @@ const step4Executor = self.MultiPageBackgroundStep4?.createStep4Executor({
   waitForTabStableComplete,
   phoneVerificationHelpers,
   resolveSignupMethod,
-});
-const skipPasskeyEnrollmentExecutor = self.MultiPageBackgroundSkipPasskeyEnrollment?.createSkipPasskeyEnrollmentExecutor({
-  addLog,
-  chrome,
-  completeNodeFromBackground,
-  getTabId,
-  sendToContentScript,
-  throwIfStopped,
-  waitForTabStableComplete,
 });
 const step5Executor = self.MultiPageBackgroundStep5?.createStep5Executor({
   addLog,
@@ -14683,7 +14743,6 @@ const stepExecutorsByKey = {
   'submit-signup-email': (state) => step2Executor.executeStep2(state),
   'fill-password': (state) => step3Executor.executeStep3(state),
   'fetch-signup-code': (state) => step4Executor.executeStep4(state),
-  'skip-passkey-enrollment': (state) => skipPasskeyEnrollmentExecutor.executeSkipPasskeyEnrollment(state),
   'fill-profile': (state) => step5Executor.executeStep5(state),
   'wait-registration-success': (state) => step6Executor.executeStep6(state),
   'local-cpa-json-export': (state) => step6Executor.executeLocalCpaJsonNoRtExport(state),

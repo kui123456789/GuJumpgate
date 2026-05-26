@@ -130,13 +130,17 @@
 
 #### OAuth 手机号接码
 
-如果 OAuth 后链进入手机号验证，可在接码设置里选择“托管短信接口”，并在托管号码池中按行填写：
+如果 OAuth 后链进入手机号验证，可在接码设置里选择接码服务商。
+
+选择 `SMSBower` 时填写 SMSBower API Key，服务代码默认 `dr`，国家优先级可选择美国 `+1 (187)`、马来西亚 `+60 (7)`、加纳 `+233 (38)`、泰国 `+66 (52)` 等。SMSBower 返回美国 `+1` 号码时，扩展会在 OpenAI 页面选择 `United States` 并提交本地 10 位号码。
+
+选择“托管短信接口”时，在托管号码池中按行填写：
 
 ```text
 2092905100----https://example.test/api/sms/recordText?key=replace-me
 ```
 
-10 位号码会按美国 `+1` 本地号提交。该配置只用于 Auth/OAuth 后置 `add-phone / phone-verification`，不复用 PayPal 接码号码池。
+10 位号码会按美国 `+1` 本地号提交。以上配置只用于 Auth/OAuth 后置 `add-phone / phone-verification`，不复用 PayPal 接码号码池。
 
 #### PAYPAL 接码电话
 

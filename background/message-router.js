@@ -1019,27 +1019,6 @@
         }
       }
 
-      if (stepKey === 'skip-passkey-enrollment') {
-        if (payload.skipProfileStep) {
-          const latestState = await getState();
-          const step5Status = latestState.nodeStatuses?.['fill-profile'] || 'pending';
-          if (!isStepProtectedFromAutoSkip(step5Status)) {
-            await setNodeStatus('fill-profile', 'skipped');
-            if (typeof markCurrentRegistrationAccountUsed === 'function') {
-              await markCurrentRegistrationAccountUsed(latestState, {
-                logPrefix: '步骤 4.5 跳过步骤 5',
-                level: 'ok',
-              });
-            }
-            await addLog('步骤 4.5：检测到账号已直接进入已登录态，已自动跳过步骤 5。', 'warn', {
-              step,
-              stepKey: 'skip-passkey-enrollment',
-            });
-          }
-        }
-        return;
-      }
-
       if (stepKey === 'oauth-login' || stepKey === 'relogin-bound-email') {
         if (stepKey === 'oauth-login') {
           await syncStepAccountIdentityFromPayload(payload);

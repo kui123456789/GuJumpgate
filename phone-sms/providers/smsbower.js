@@ -1,13 +1,43 @@
 // phone-sms/providers/smsbower.js - SMSBower 接码平台适配层
 (function attachSmsBowerProvider(root, factory) {
-  root.PhoneSmsBowerProvider = factory();
+  const moduleValue = factory();
+  root.PhoneSmsBowerProvider = moduleValue;
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = moduleValue;
+  }
 })(typeof self !== 'undefined' ? self : globalThis, function createSmsBowerProviderModule() {
   const PROVIDER_ID = 'smsbower';
   const DEFAULT_BASE_URL = 'https://smsbower.page/stubs/handler_api.php';
   const DEFAULT_SERVICE_CODE = 'dr';
   const DEFAULT_SERVICE_LABEL = 'OpenAI';
-  const DEFAULT_COUNTRY_ID = 52;
-  const DEFAULT_COUNTRY_LABEL = 'Thailand';
+  const DEFAULT_COUNTRY_ID = 12;
+  const DEFAULT_COUNTRY_LABEL = '美国 +1 (United States)';
+  const DEFAULT_COUNTRY_ORDER = Object.freeze([12, 187, 19, 38, 7, 52]);
+  const SUPPORTED_COUNTRY_ITEMS = Object.freeze([
+    { id: 12, label: '美国 +1 (United States)', phonePrefix: '1', searchText: '12 US USA United States 美国 +1 实体' },
+    { id: 187, label: '美国虚拟 +1 (United States Virtual)', phonePrefix: '1', searchText: '187 US USA United States Virtual 美国虚拟 +1' },
+    { id: 19, label: '尼日利亚 +234 (Nigeria)', phonePrefix: '234', searchText: '19 NG Nigeria 尼日利亚 +234' },
+    { id: 52, label: '泰国 +66 (Thailand)', phonePrefix: '66', searchText: '52 TH Thailand 泰国 +66' },
+    { id: 7, label: '马来西亚 +60 (Malaysia)', phonePrefix: '60', searchText: '7 MY Malaysia 马来西亚 +60' },
+    { id: 38, label: '加纳 +233 (Ghana)', phonePrefix: '233', searchText: '38 GH Ghana 加纳 +233' },
+    { id: 6, label: '印度尼西亚 +62 (Indonesia)', phonePrefix: '62', searchText: '6 ID Indonesia 印度尼西亚 +62' },
+    { id: 10, label: '越南 +84 (Vietnam)', phonePrefix: '84', searchText: '10 VN Vietnam 越南 +84' },
+  ]);
+  const KNOWN_DIAL_PREFIXES = Object.freeze([
+    '1246', '1264', '1268', '1284', '1340', '1345', '1441', '1473', '1649', '1664', '1670', '1671', '1684',
+    '1721', '1758', '1767', '1784', '1809', '1829', '1849', '1868', '1869', '1876',
+    '971', '962', '886', '880', '856', '855', '852', '853', '673', '672', '670', '599', '598', '597', '596',
+    '595', '594', '593', '592', '591', '590', '509', '508', '507', '506', '505', '504', '503', '502', '501',
+    '423', '421', '420', '389', '387', '386', '385', '383', '382', '381', '380', '379', '378', '377', '376',
+    '375', '374', '373', '372', '371', '370', '359', '358', '357', '356', '355', '354', '353', '352', '351',
+    '350', '299', '298', '297', '291', '290', '269', '268', '267', '266', '265', '264', '263', '262', '261',
+    '260', '258', '257', '256', '255', '254', '253', '252', '251', '250', '249', '248', '247', '246', '245',
+    '244', '243', '242', '241', '240', '239', '238', '237', '236', '235', '234', '233', '232', '231', '230',
+    '229', '228', '227', '226', '225', '224', '223', '222', '221', '220', '218', '216', '213', '212', '211',
+    '98', '95', '94', '93', '92', '91', '90', '89', '88', '86', '84', '82', '81', '66', '65', '64', '63',
+    '62', '61', '60', '58', '57', '56', '55', '54', '53', '52', '51', '49', '48', '47', '46', '45', '44',
+    '43', '41', '40', '39', '36', '34', '33', '32', '31', '30', '27', '20', '7', '1',
+  ]);
   const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
   const DEFAULT_LANG = '';
   const DEFAULT_PRICES_ACTION = 'getPricesV3';
@@ -19,8 +49,58 @@
     return Number.isFinite(fallbackParsed) && fallbackParsed > 0 ? fallbackParsed : DEFAULT_COUNTRY_ID;
   }
 
+  function getSupportedCountryById(id) {
+    const normalizedId = normalizeSmsBowerCountryId(id, 0);
+    return SUPPORTED_COUNTRY_ITEMS.find((entry) => entry.id === normalizedId) || null;
+  }
+
   function normalizeSmsBowerCountryLabel(value = '', fallback = DEFAULT_COUNTRY_LABEL) {
-    return String(value || '').trim() || fallback;
+    const trimmed = String(value || '').trim();
+    if (trimmed) return trimmed;
+    if (typeof fallback === 'number' || /^\d+$/.test(String(fallback || '').trim())) {
+      const id = normalizeSmsBowerCountryId(fallback, DEFAULT_COUNTRY_ID);
+      return getSupportedCountryById(id)?.label || `Country #${id}`;
+    }
+    return String(fallback || '').trim() || DEFAULT_COUNTRY_LABEL;
+  }
+
+  function normalizeSmsBowerCountryOrder(value = [], fallbackOrder = DEFAULT_COUNTRY_ORDER) {
+    const source = Array.isArray(value)
+      ? value
+      : String(value || '')
+        .split(/[\r\n,，;；]+/)
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean);
+    const normalized = [];
+    const seen = new Set();
+
+    source.forEach((entry) => {
+      const id = normalizeSmsBowerCountryId(
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+          ? (entry.id ?? entry.countryId ?? entry.country ?? '')
+          : entry,
+        0
+      );
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      normalized.push(id);
+    });
+
+    if (normalized.length) return normalized.slice(0, 10);
+
+    const fallback = Array.isArray(fallbackOrder) ? fallbackOrder : DEFAULT_COUNTRY_ORDER;
+    fallback.forEach((entry) => {
+      const id = normalizeSmsBowerCountryId(
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+          ? (entry.id ?? entry.countryId ?? entry.country ?? '')
+          : entry,
+        0
+      );
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      normalized.push(id);
+    });
+    return normalized.length ? normalized.slice(0, 10) : [...DEFAULT_COUNTRY_ORDER];
   }
 
   function normalizeSmsBowerCountryFallback(value = []) {
@@ -181,11 +261,19 @@
   function resolveCountryConfig(state = {}) {
     return {
       id: normalizeSmsBowerCountryId(state.smsBowerCountryId ?? state.heroSmsCountryId),
-      label: normalizeSmsBowerCountryLabel(state.smsBowerCountryLabel || state.heroSmsCountryLabel),
+      label: normalizeSmsBowerCountryLabel(state.smsBowerCountryLabel || state.heroSmsCountryLabel, state.smsBowerCountryId ?? state.heroSmsCountryId ?? DEFAULT_COUNTRY_ID),
     };
   }
 
   function resolveCountryCandidates(state = {}) {
+    const countryOrder = normalizeSmsBowerCountryOrder(state.smsBowerCountryOrder, []);
+    if (countryOrder.length) {
+      return countryOrder.map((id) => ({
+        id,
+        label: normalizeSmsBowerCountryLabel('', id),
+      }));
+    }
+
     const primary = resolveCountryConfig(state);
     const fallbackSource = state.smsBowerCountryFallback !== undefined
       ? state.smsBowerCountryFallback
@@ -196,7 +284,7 @@
       const id = normalizeSmsBowerCountryId(entry.id, 0);
       if (!id || seen.has(id)) return;
       seen.add(id);
-      candidates.push({ id, label: normalizeSmsBowerCountryLabel(entry.label, `Country #${id}`) });
+      candidates.push({ id, label: normalizeSmsBowerCountryLabel(entry.label, id) });
     });
     return candidates;
   }
@@ -212,31 +300,75 @@
     };
   }
 
+  function normalizeSmsBowerPhoneForSubmit(phoneNumber = '', countryId = DEFAULT_COUNTRY_ID) {
+    const digits = String(phoneNumber || '').replace(/[^\d]/g, '');
+    if ([12, 187].includes(normalizeSmsBowerCountryId(countryId, 0))) {
+      if (digits.length === 11 && digits.startsWith('1')) {
+        return digits.slice(1);
+      }
+      if (digits.length === 10) {
+        return digits;
+      }
+    }
+    return digits;
+  }
+
+  function resolveSmsBowerPhoneDialPrefix(phoneNumber = '') {
+    const digits = String(phoneNumber || '').replace(/[^\d]/g, '');
+    if (!digits) return '';
+    return KNOWN_DIAL_PREFIXES
+      .find((prefix) => digits.startsWith(prefix) && digits.length > prefix.length) || '';
+  }
+
+  function getSmsBowerCountryDialMismatch(activation, countryConfig = {}) {
+    const country = getSupportedCountryById(countryConfig?.id);
+    const expectedPrefix = String(country?.phonePrefix || '').replace(/[^\d]/g, '');
+    if (!expectedPrefix) {
+      return null;
+    }
+    const rawDigits = String(activation?.rawPhoneNumber || activation?.phoneNumber || '').replace(/[^\d]/g, '');
+    if (!rawDigits || rawDigits.startsWith(expectedPrefix)) {
+      return null;
+    }
+    const actualPrefix = resolveSmsBowerPhoneDialPrefix(rawDigits);
+    if (!actualPrefix || actualPrefix === expectedPrefix) {
+      return null;
+    }
+    return {
+      expectedPrefix,
+      actualPrefix,
+    };
+  }
+
   function normalizeActivation(record, fallback = {}) {
     let activationId = '';
-    let phoneNumber = '';
+    let rawPhoneNumber = '';
     let activationCost;
 
     if (typeof record === 'string') {
       const match = record.trim().match(/^ACCESS_NUMBER:([^:]+):(.+)$/i);
       if (match) {
         activationId = match[1];
-        phoneNumber = match[2];
+        rawPhoneNumber = match[2];
       }
     } else if (record && typeof record === 'object' && !Array.isArray(record)) {
       activationId = String(record.activationId ?? record.id ?? '').trim();
-      phoneNumber = String(record.phoneNumber ?? record.phone ?? '').trim();
+      rawPhoneNumber = String(record.rawPhoneNumber ?? record.phoneNumber ?? record.phone ?? '').trim();
       activationCost = record.activationCost ?? record.price ?? record.cost;
     }
 
-    if (!activationId || !phoneNumber) return null;
+    if (!activationId || !rawPhoneNumber) return null;
+    const countryId = normalizeSmsBowerCountryId(fallback.countryId ?? fallback.id ?? record?.countryId, DEFAULT_COUNTRY_ID);
+    const phoneNumber = normalizeSmsBowerPhoneForSubmit(rawPhoneNumber, countryId);
+    if (!phoneNumber) return null;
     return {
       activationId,
       phoneNumber,
+      rawPhoneNumber,
       provider: PROVIDER_ID,
       serviceCode: normalizeSmsBowerServiceCode(fallback.serviceCode),
-      countryId: normalizeSmsBowerCountryId(fallback.countryId ?? fallback.id, DEFAULT_COUNTRY_ID),
-      countryLabel: normalizeSmsBowerCountryLabel(fallback.countryLabel || fallback.label, DEFAULT_COUNTRY_LABEL),
+      countryId,
+      countryLabel: normalizeSmsBowerCountryLabel(fallback.countryLabel || fallback.label, countryId),
       successfulUses: Math.max(0, Math.floor(Number(record?.successfulUses) || 0)),
       maxUses: 1,
       ...(activationCost !== undefined ? { price: Number(activationCost) } : {}),
@@ -262,16 +394,24 @@
         .map((value) => normalizeSmsBowerCountryId(value, 0))
         .filter((id) => id > 0)
     );
-    let countryCandidates = resolveCountryCandidates(state)
+    const allCountryCandidates = resolveCountryCandidates(state);
+    let countryCandidates = allCountryCandidates
       .filter((entry) => !blockedCountryIds.has(normalizeSmsBowerCountryId(entry.id, 0)));
+    if (!countryCandidates.length && blockedCountryIds.size > 0) {
+      const blockedLabels = allCountryCandidates
+        .filter((entry) => blockedCountryIds.has(normalizeSmsBowerCountryId(entry.id, 0)))
+        .map((entry) => entry.label || `Country #${entry.id}`)
+        .filter(Boolean);
+      throw new Error(`SMSBower 已跳过所有候选国家${blockedLabels.length ? `：${blockedLabels.join('、')}` : ''}。`);
+    }
     if (!countryCandidates.length) {
-      countryCandidates = resolveCountryCandidates(state);
+      countryCandidates = allCountryCandidates;
     }
 
     const failures = [];
     let lastError = null;
     for (const countryConfig of countryCandidates) {
-      for (const action of ['getNumberV2', 'getNumber']) {
+      for (const action of ['getNumber']) {
         try {
           const payload = await fetchPayload(config, {
             action,
@@ -285,7 +425,15 @@
             countryId: countryConfig.id,
             countryLabel: countryConfig.label,
           });
-          if (activation) return activation;
+          if (activation) {
+            const dialMismatch = getSmsBowerCountryDialMismatch(activation, countryConfig);
+            if (dialMismatch) {
+              await setActivationStatus(state, activation, 8, deps).catch(() => '');
+              failures.push(`${countryConfig.label}: 返回号码区号 +${dialMismatch.actualPrefix} 与国家区号 +${dialMismatch.expectedPrefix} 不匹配，已取消订单`);
+              continue;
+            }
+            return activation;
+          }
           const text = describePayload(payload);
           if (isTerminalPayload(text)) {
             throw new Error(`SMSBower ${action}失败：${text}`);
@@ -339,6 +487,25 @@
     return digitMatch?.[1] || '';
   }
 
+  function extractVerificationCodeFromStatus(statusText = '') {
+    const match = String(statusText || '').trim().match(/^STATUS_OK:(.+)$/i);
+    return match ? extractVerificationCode(match[1]) : '';
+  }
+
+  function isWaitingStatus(statusText = '') {
+    return /^STATUS_(WAIT_CODE|WAIT_RETRY|WAIT_RESEND)(?::.+)?$/i.test(String(statusText || '').trim());
+  }
+
+  function isCancelledStatus(statusText = '') {
+    return /^STATUS_CANCEL$/i.test(String(statusText || '').trim());
+  }
+
+  function parseBalancePayload(payload = '') {
+    const text = describePayload(payload);
+    const balance = Number(String(text).replace(/^ACCESS_BALANCE:/i, '').trim());
+    return { balance, raw: payload };
+  }
+
   async function pollActivationCode(state = {}, activation, options = {}, deps = {}) {
     const normalizedActivation = normalizeActivation(activation, activation);
     if (!normalizedActivation) {
@@ -373,11 +540,10 @@
         });
       }
 
-      const okMatch = String(lastResponse || '').match(/^STATUS_OK:(.+)$/i);
-      const code = okMatch ? extractVerificationCode(okMatch[1]) : '';
+      const code = extractVerificationCodeFromStatus(lastResponse);
       if (code) return code;
 
-      if (/^STATUS_(WAIT_CODE|WAIT_RETRY|WAIT_RESEND)(?::.+)?$/i.test(lastResponse)) {
+      if (isWaitingStatus(lastResponse)) {
         if (typeof options.onWaitingForCode === 'function') {
           await options.onWaitingForCode({
             activation: normalizedActivation,
@@ -391,7 +557,7 @@
         continue;
       }
 
-      if (/^STATUS_CANCEL$/i.test(lastResponse)) {
+      if (isCancelledStatus(lastResponse)) {
         throw new Error('SMSBower 订单在短信到达前已被取消。');
       }
       throw new Error(`SMSBower 查询验证码失败：${lastResponse || '空响应'}`);
@@ -403,8 +569,7 @@
 
   async function fetchBalance(state = {}, deps = {}) {
     const payload = await fetchPayload(resolveConfig(state, deps), { action: 'getBalance' }, 'SMSBower getBalance');
-    const balance = Number(String(describePayload(payload)).replace(/^ACCESS_BALANCE:/i, '').trim());
-    return { balance, raw: payload };
+    return parseBalancePayload(payload);
   }
 
   async function fetchPrices(state = {}, countryConfig = resolveCountryConfig(state), deps = {}) {
@@ -459,10 +624,13 @@
       label: 'SMSBower',
       defaultCountryId: DEFAULT_COUNTRY_ID,
       defaultCountryLabel: DEFAULT_COUNTRY_LABEL,
+      supportedCountries: SUPPORTED_COUNTRY_ITEMS,
+      defaultCountryOrder: DEFAULT_COUNTRY_ORDER,
       defaultProduct: DEFAULT_SERVICE_LABEL,
       defaultServiceCode: DEFAULT_SERVICE_CODE,
       normalizeCountryId: normalizeSmsBowerCountryId,
       normalizeCountryLabel: normalizeSmsBowerCountryLabel,
+      normalizeCountryOrder: normalizeSmsBowerCountryOrder,
       normalizeCountryFallback: normalizeSmsBowerCountryFallback,
       normalizeMaxPrice: normalizeSmsBowerPrice,
       normalizeServiceCode: normalizeSmsBowerServiceCode,
@@ -485,16 +653,25 @@
     DEFAULT_BASE_URL,
     DEFAULT_COUNTRY_ID,
     DEFAULT_COUNTRY_LABEL,
+    DEFAULT_COUNTRY_ORDER,
     DEFAULT_SERVICE_CODE,
     DEFAULT_SERVICE_LABEL,
+    SUPPORTED_COUNTRY_ITEMS,
     createProvider,
     describePayload,
+    extractVerificationCodeFromStatus,
+    isCancelledStatus,
+    isWaitingStatus,
     normalizeSmsBowerCountryFallback,
     normalizeSmsBowerCountryId,
     normalizeSmsBowerCountryLabel,
+    normalizeSmsBowerCountryOrder,
+    normalizeSmsBowerPhoneForSubmit,
     normalizeSmsBowerPrice,
     normalizeSmsBowerServiceCode,
     normalizeSmsBowerLang,
     normalizeSmsBowerPricesAction,
+    parseActivationPayload: normalizeActivation,
+    parseBalancePayload,
   };
 });

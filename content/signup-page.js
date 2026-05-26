@@ -78,7 +78,6 @@ if (document.documentElement.getAttribute(SIGNUP_PAGE_LISTENER_SENTINEL) !== '1'
 const SIGNUP_PAGE_NODE_HANDLERS = Object.freeze({
   'submit-signup-email': (payload) => step2_clickRegister(payload),
   'fill-password': (payload) => step3_fillEmailPassword(payload),
-  'skip-passkey-enrollment': (payload) => skipPasskeyEnrollmentStep(payload),
   'fill-profile': (payload) => step5_fillNameBirthday(payload),
   'oauth-login': (payload) => step6_login(payload),
   'confirm-oauth': (_payload) => step8_findAndClick(),
@@ -91,7 +90,6 @@ function resolveCommandNodeId(message = {}) {
   }
   const visibleStep = Number(message.payload?.visibleStep || message.step) || 0;
   if (visibleStep === 4) return 'fetch-signup-code';
-  if (visibleStep === 45) return 'skip-passkey-enrollment';
   if (visibleStep === 8 || visibleStep === 11) return 'fetch-login-code';
   if (visibleStep === 9 || visibleStep === 12) return 'post-login-phone-verification';
   if (visibleStep === 10 || visibleStep === 13) return 'confirm-oauth';
@@ -1435,6 +1433,14 @@ function getSignupCountryLabelAliases(value) {
 
   const raw = String(value || '').trim();
   addAlias(raw);
+  Array.from(raw.matchAll(/\(([^()]+)\)/g))
+    .map((match) => match[1])
+    .forEach(addAlias);
+  const withoutParentheses = raw.replace(/\([^()]*\)/g, ' ');
+  const withoutDialCodes = withoutParentheses
+    .replace(/\+\s*\d{1,4}\b/g, ' ')
+    .replace(/\(\s*\+\s*\d{1,4}\s*\)/g, ' ');
+  addAlias(withoutDialCodes);
 
   const normalized = normalizeSignupCountryLabel(raw);
   const compact = normalized.replace(/\s+/g, '');
@@ -1458,6 +1464,22 @@ function getSignupCountryLabelAliases(value) {
   }
 
   return Array.from(aliases);
+}
+
+function isLooseSignupCountryLabelMatch(optionLabel, targetLabel) {
+  const phoneCountryUtils = (typeof self !== 'undefined' ? self : globalThis)?.MultiPagePhoneCountryUtils
+    || globalThis?.MultiPagePhoneCountryUtils
+    || {};
+  if (typeof phoneCountryUtils.isLooseCountryLabelMatch === 'function') {
+    return phoneCountryUtils.isLooseCountryLabelMatch(optionLabel, targetLabel);
+  }
+  if (!optionLabel || !targetLabel || optionLabel.length <= 2 || targetLabel.length <= 2) {
+    return false;
+  }
+  if (optionLabel.includes(targetLabel)) {
+    return true;
+  }
+  return /\s/.test(optionLabel) && targetLabel.includes(optionLabel);
 }
 
 function getSignupPhoneOptionLabel(option) {
@@ -1732,16 +1754,20 @@ function resolveSignupPhoneDialCodeFromNumber(phoneNumber = '', texts = []) {
 }
 
 function resolveSignupPhoneTargetDialCode(options = {}, targetOption = null) {
-  const optionDialCode = extractDialCodeFromText(getSignupPhoneOptionLabel(targetOption));
-  if (optionDialCode) {
-    return optionDialCode;
-  }
-
   const countryText = String(options.countryLabel || '').trim();
   if (/australia|澳大利亚/i.test(countryText)) return '61';
   if (/thailand|泰国/i.test(countryText)) return '66';
   if (/vietnam|越南/i.test(countryText)) return '84';
   if (/england|united\s*kingdom|great\s*britain|\bbritain\b|英国|英格兰|uk|gb/i.test(countryText)) return '44';
+  const countryDialCode = extractDialCodeFromText(countryText);
+  if (countryDialCode) {
+    return countryDialCode;
+  }
+
+  const optionDialCode = extractDialCodeFromText(getSignupPhoneOptionLabel(targetOption));
+  if (optionDialCode) {
+    return optionDialCode;
+  }
 
   return resolveSignupPhoneDialCodeFromNumber(options.phoneNumber);
 }
@@ -1771,8 +1797,7 @@ function doesSignupPhoneCountryTextMatchTarget(text, targetOption, options = {})
     label
     && (
       normalizedText === label
-      || (label.length > 1 && normalizedText.includes(label))
-      || (normalizedText.length > 2 && label.includes(normalizedText))
+      || isLooseSignupCountryLabelMatch(normalizedText, label)
     )
   ))) {
     return true;
@@ -1833,9 +1858,7 @@ function findSignupPhoneCountryOptionByLabel(phoneInput, countryLabel) {
         .map((label) => normalizeSignupCountryLabel(label))
         .filter(Boolean);
       return normalizedLabels.some((optionLabel) => normalizedTargets.some((normalizedTarget) => (
-          optionLabel.length > 2
-          && normalizedTarget.length > 2
-          && (optionLabel.includes(normalizedTarget) || normalizedTarget.includes(optionLabel))
+          isLooseSignupCountryLabelMatch(optionLabel, normalizedTarget)
         )));
     })
     || null;
@@ -2089,7 +2112,12 @@ async function ensureSignupPhoneCountrySelected(phoneInput, options = {}) {
   }
 
   const byLabel = findSignupPhoneCountryOptionByLabel(phoneInput, options.countryLabel);
-  const byPhoneNumber = findSignupPhoneCountryOptionByPhoneNumber(phoneInput, options.phoneNumber);
+  const countryDialCode = extractDialCodeFromText(String(options.countryLabel || '').trim());
+  const byPhoneNumberCandidate = findSignupPhoneCountryOptionByPhoneNumber(phoneInput, options.phoneNumber);
+  const byPhoneNumberDialCode = extractDialCodeFromText(getSignupPhoneOptionLabel(byPhoneNumberCandidate));
+  const byPhoneNumber = countryDialCode && byPhoneNumberDialCode && byPhoneNumberDialCode !== countryDialCode
+    ? null
+    : byPhoneNumberCandidate;
   const targets = [byLabel, byPhoneNumber, null].filter((target, index, list) => (
     index === list.findIndex((item) => (
       (!item && !target)
@@ -4207,9 +4235,7 @@ function findLoginPhoneCountryOptionByLabel(select, countryLabel) {
       .map((label) => normalizeCountryLabel(label))
       .filter(Boolean);
     return normalizedLabels.some((optionLabel) => (
-      optionLabel.length > 2
-      && normalizedTarget.length > 2
-      && (optionLabel.includes(normalizedTarget) || normalizedTarget.includes(optionLabel))
+      isLooseSignupCountryLabelMatch(optionLabel, normalizedTarget)
     ));
   }) || null;
 }
@@ -5108,7 +5134,7 @@ async function prepareSignupVerificationFlow(payload = {}, timeout = 30000) {
     }
 
     if (snapshot.state === 'passkey_enrollment') {
-      log(`${prepareLogLabel}：页面已进入通行密钥创建页，本步骤按已完成处理，后续将执行跳过通行密钥节点。`, 'ok');
+      log(`${prepareLogLabel}：页面已进入通行密钥创建页，本步骤按已完成处理，后续由步骤 5 自动点击“跳过”。`, 'ok');
       return {
         ready: true,
         alreadyVerified: true,
@@ -7416,119 +7442,26 @@ async function waitForPasskeyEnrollmentStepState(timeout = 30000, options = {}) 
   return lastState;
 }
 
-async function waitForPasskeyEnrollmentSkipAction(timeout = 12000) {
-  const start = Date.now();
-  let lastState = getPasskeyEnrollmentStepState();
-
-  while (Date.now() - start < timeout) {
-    throwIfStopped();
-    lastState = getPasskeyEnrollmentStepState();
-    if (lastState.state !== 'passkey_enrollment') {
-      return { action: null, state: lastState };
-    }
-    if (lastState.skipAction) {
-      return { action: lastState.skipAction, state: lastState };
-    }
-    await sleep(200);
-  }
-
-  return { action: null, state: lastState };
-}
-
-function buildPasskeySkipCompletionPayload(state, extra = {}) {
-  if (state?.state === 'logged_in_home') {
-    return {
-      ...(extra || {}),
-      skipProfileStep: true,
-      skipProfileStepReason: 'passkey_skip_logged_in_home',
-      url: state.url || location.href,
-    };
-  }
-
-  if (state?.state === 'step5') {
-    return {
-      ...(extra || {}),
-      profilePage: true,
-      url: state.url || location.href,
-    };
-  }
-
-  return {
-    ...(extra || {}),
-    url: state?.url || location.href,
-  };
-}
-
-async function skipPasskeyEnrollmentStep(payload = {}) {
-  const timeoutMs = Math.max(1000, Number(payload?.timeoutMs) || 30000);
-  const initialState = await waitForPasskeyEnrollmentStepState(Math.min(8000, timeoutMs));
-
-  if (initialState.state === 'step5' || initialState.state === 'logged_in_home') {
-    const completionPayload = buildPasskeySkipCompletionPayload(initialState, {
-      passkeyEnrollmentAbsent: true,
-    });
-    log('步骤 4.5：未检测到通行密钥创建页，当前已进入后续页面。', 'ok', {
-      step: 45,
-      stepKey: 'skip-passkey-enrollment',
-    });
-    return completionPayload;
-  }
-
-  if (initialState.state !== 'passkey_enrollment') {
-    throw new Error(`步骤 4.5：未检测到通行密钥创建页、资料页或已登录页。URL: ${initialState.url || location.href}`);
-  }
-
-  const { action, state: actionState } = await waitForPasskeyEnrollmentSkipAction(Math.min(12000, timeoutMs));
-  if (actionState?.state === 'step5' || actionState?.state === 'logged_in_home') {
-    return buildPasskeySkipCompletionPayload(actionState, {
-      passkeyEnrollmentAbsent: true,
-    });
-  }
-  if (!action) {
-    throw new Error(`步骤 4.5：检测到通行密钥创建页，但未找到可点击的“跳过”按钮。URL: ${location.href}`);
-  }
-
-  const performOperationWithDelay = typeof getOperationDelayRunner === 'function'
-    ? getOperationDelayRunner()
-    : async (metadata, operation) => {
-        const rootScope = typeof window !== 'undefined' ? window : globalThis;
-        const gate = rootScope?.CodexOperationDelay?.performOperationWithDelay;
-        return typeof gate === 'function' ? gate(metadata, operation) : operation();
-      };
-
-  log('步骤 4.5：检测到通行密钥创建页，正在点击“跳过”。', 'info', {
-    step: 45,
-    stepKey: 'skip-passkey-enrollment',
-  });
-  await humanPause(350, 900);
-  await performOperationWithDelay({ stepKey: 'skip-passkey-enrollment', kind: 'click', label: 'skip-passkey-enrollment' }, async () => {
-    simulateClick(action);
-  });
-
-  const outcome = await waitForPasskeyEnrollmentStepState(timeoutMs, {
-    desiredStates: ['step5', 'logged_in_home'],
-  });
-  if (outcome.state === 'step5' || outcome.state === 'logged_in_home') {
-    const completionPayload = buildPasskeySkipCompletionPayload(outcome, {
-      skippedPasskeyEnrollment: true,
-    });
-    log('步骤 4.5：已跳过通行密钥创建页。', 'ok', {
-      step: 45,
-      stepKey: 'skip-passkey-enrollment',
-    });
-    return completionPayload;
-  }
-
-  if (isPasskeyEnrollmentPage()) {
-    throw new Error(`步骤 4.5：点击“跳过”后仍停留在通行密钥创建页。URL: ${location.href}`);
-  }
-
-  throw new Error(`步骤 4.5：点击“跳过”后未进入资料页或已登录页。URL: ${outcome.url || location.href}`);
-}
-
 async function step5_fillNameBirthday(payload) {
   if (isPasskeyEnrollmentPage()) {
-    throw new Error('当前页面仍停留在通行密钥注册页，请先执行跳过通行密钥节点。URL: ' + location.href);
+    log('步骤 5：检测到通行密钥页，正在自动点击“跳过”。', 'warn');
+    await skipCreateAccountEnrollPasskey({
+      timeoutMs: 15000,
+      settleMs: 1200,
+    });
+    const outcome = await waitForPasskeyEnrollmentStepState(30000, {
+      desiredStates: ['step5', 'logged_in_home'],
+    });
+    if (outcome.state === 'logged_in_home') {
+      return {
+        skipProfileStep: true,
+        skipProfileStepReason: 'passkey_skip_logged_in_home',
+        url: outcome.url || location.href,
+      };
+    }
+    if (outcome.state !== 'step5') {
+      throw new Error(`步骤 5：点击“跳过”后未进入资料页。URL: ${outcome.url || location.href}`);
+    }
   }
 
   const { firstName, lastName, age, year, month, day, prefillOnly = false } = payload;
