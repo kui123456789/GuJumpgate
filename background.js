@@ -50,7 +50,6 @@ importScripts(
   'background/steps/submit-signup-email.js',
   'background/steps/fill-password.js',
   'background/steps/fetch-signup-code.js',
-  'background/steps/skip-passkey-enrollment.js',
   'background/steps/fill-profile.js',
   'background/steps/wait-registration-success.js',
   'background/steps/create-plus-checkout.js',
@@ -11656,13 +11655,12 @@ const AUTO_RUN_STEP_IDLE_LOG_CHECK_INTERVAL_MS = 5000;
 const HOSTED_CHECKOUT_FINAL_WAIT_TIMEOUT_MS = 30 * 60 * 1000;
 const AUTO_RUN_STEP_IDLE_RESTART_MAX_ATTEMPTS = 3;
 const AUTO_RUN_STEP_IDLE_RESTART_ERROR_PREFIX = 'AUTO_RUN_STEP_IDLE_RESTART::';
-const AUTO_RUN_BACKGROUND_COMPLETED_STEPS = new Set([1, 2, 4, 45, 6, 7, 8, 9]);
+const AUTO_RUN_BACKGROUND_COMPLETED_STEPS = new Set([1, 2, 4, 6, 7, 8, 9]);
 const STEP_COMPLETION_SIGNAL_STEPS = new Set([3, 5, 10, 12]);
 const AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS = new Set([
   'open-chatgpt',
   'submit-signup-email',
   'fetch-signup-code',
-  'skip-passkey-enrollment',
   'wait-registration-success',
   'local-cpa-json-export',
   'plus-checkout-billing',
@@ -14474,15 +14472,6 @@ const step4Executor = self.MultiPageBackgroundStep4?.createStep4Executor({
   phoneVerificationHelpers,
   resolveSignupMethod,
 });
-const skipPasskeyEnrollmentExecutor = self.MultiPageBackgroundSkipPasskeyEnrollment?.createSkipPasskeyEnrollmentExecutor({
-  addLog,
-  chrome,
-  completeNodeFromBackground,
-  getTabId,
-  sendToContentScript,
-  throwIfStopped,
-  waitForTabStableComplete,
-});
 const step5Executor = self.MultiPageBackgroundStep5?.createStep5Executor({
   addLog,
   generateRandomBirthday,
@@ -14754,7 +14743,6 @@ const stepExecutorsByKey = {
   'submit-signup-email': (state) => step2Executor.executeStep2(state),
   'fill-password': (state) => step3Executor.executeStep3(state),
   'fetch-signup-code': (state) => step4Executor.executeStep4(state),
-  'skip-passkey-enrollment': (state) => skipPasskeyEnrollmentExecutor.executeSkipPasskeyEnrollment(state),
   'fill-profile': (state) => step5Executor.executeStep5(state),
   'wait-registration-success': (state) => step6Executor.executeStep6(state),
   'local-cpa-json-export': (state) => step6Executor.executeLocalCpaJsonNoRtExport(state),

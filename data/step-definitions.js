@@ -20,7 +20,6 @@
     { id: 2, order: 20, key: 'submit-signup-email', title: '注册并输入邮箱', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-signup-email' },
     { id: 3, order: 30, key: 'fill-password', title: '填写密码并继续', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-password' },
     { id: 4, order: 40, key: 'fetch-signup-code', title: '获取注册验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-signup-code' },
-    createSkipPasskeyEnrollmentStepDefinition(),
     { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
     { id: 6, order: 60, key: 'wait-registration-success', title: '等待注册成功', sourceId: 'chatgpt', driverId: null, command: 'wait-registration-success' },
     { id: 7, order: 70, key: 'plus-checkout-create', title: '创建 Plus Checkout', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-create' },
@@ -34,14 +33,14 @@
     { id: 2, order: 20, key: 'submit-signup-email', title: '注册并输入邮箱', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-signup-email' },
     { id: 3, order: 30, key: 'fill-password', title: '填写密码并继续', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-password' },
     { id: 4, order: 40, key: 'fetch-signup-code', title: '获取注册验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-signup-code' },
-    createSkipPasskeyEnrollmentStepDefinition(),
     { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
     { id: 6, order: 60, key: 'plus-checkout-create', title: '创建 Plus Checkout', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-create' },
     { id: 7, order: 70, key: 'plus-checkout-billing', title: '填写账单并提交订单', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-billing' },
     { id: 8, order: 80, key: 'paypal-approve', title: 'PayPal 登录与授权', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-approve' },
     { id: 9, order: 90, key: 'plus-checkout-return', title: '订阅回跳确认', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-return' },
   ];
-  const PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS = PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS.slice(0, 7);
+  const PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS = PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS
+    .slice(0, PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS.findIndex((step) => step.key === 'plus-checkout-billing'));
   const LOCAL_CPA_JSON_NO_RT_EXPORT_STEP_DEFINITION = {
     id: 7,
     order: 70,
@@ -57,7 +56,6 @@
     { id: 2, order: 20, key: 'submit-signup-email', title: '注册并输入邮箱', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-signup-email' },
     { id: 3, order: 30, key: 'fill-password', title: '填写密码并继续', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-password' },
     { id: 4, order: 40, key: 'fetch-signup-code', title: '获取注册验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-signup-code' },
-    createSkipPasskeyEnrollmentStepDefinition(),
     { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
     { id: 6, order: 60, key: 'plus-checkout-create', title: '打开 GoPay 订阅页', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-create' },
     { id: 7, order: 70, key: 'gopay-subscription-confirm', title: '等待 GoPay 订阅确认', sourceId: 'gopay-flow', driverId: 'content/gopay-flow', command: 'gopay-subscription-confirm' },
@@ -68,7 +66,6 @@
     { id: 2, order: 20, key: 'submit-signup-email', title: '注册并输入邮箱', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-signup-email' },
     { id: 3, order: 30, key: 'fill-password', title: '填写密码并继续', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-password' },
     { id: 4, order: 40, key: 'fetch-signup-code', title: '获取注册验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-signup-code' },
-    createSkipPasskeyEnrollmentStepDefinition(),
     { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
     { id: 6, order: 60, key: 'plus-checkout-create', title: '创建 GPC 订单', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-create' },
     { id: 7, order: 70, key: 'plus-checkout-billing', title: '等待 GPC 任务完成', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-billing' },
@@ -76,21 +73,6 @@
 
   function isPhoneSignupReloginAfterBindEmailEnabled(options = {}) {
     return Boolean(options?.phoneSignupReloginAfterBindEmailEnabled);
-  }
-
-  function createSkipPasskeyEnrollmentStepDefinition() {
-    return {
-      id: 45,
-      order: 45,
-      key: 'skip-passkey-enrollment',
-      title: '跳过通行密钥',
-      sourceId: 'openai-auth',
-      driverId: 'content/signup-page',
-      command: 'skip-passkey-enrollment',
-      ui: {
-        stepLabel: '4.5',
-      },
-    };
   }
 
   function createOpenAiAuthTail(startId, startOrder, signupMethod = SIGNUP_METHOD_EMAIL, options = {}) {

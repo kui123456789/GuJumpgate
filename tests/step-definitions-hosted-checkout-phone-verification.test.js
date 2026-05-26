@@ -16,7 +16,8 @@ function getOpenAiSteps(options = {}) {
 
 test('hosted checkout email OAuth tail runs phone verification before confirming OAuth', () => {
   const steps = getOpenAiSteps({ signupMethod: 'email' });
-  const tail = steps.slice(7).map((step) => `${step.id}:${step.key}`);
+  const oauthIndex = steps.findIndex((step) => step.key === 'oauth-login');
+  const tail = steps.slice(oauthIndex).map((step) => `${step.id}:${step.key}`);
 
   assert.deepEqual(tail, [
     '7:oauth-login',
@@ -32,7 +33,8 @@ test('hosted checkout phone relogin OAuth tail runs post-bound phone verificatio
     signupMethod: 'phone',
     phoneSignupReloginAfterBindEmailEnabled: true,
   });
-  const tail = steps.slice(7).map((step) => `${step.id}:${step.key}`);
+  const oauthIndex = steps.findIndex((step) => step.key === 'oauth-login');
+  const tail = steps.slice(oauthIndex).map((step) => `${step.id}:${step.key}`);
 
   assert.deepEqual(tail, [
     '7:oauth-login',
