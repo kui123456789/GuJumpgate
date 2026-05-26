@@ -757,7 +757,7 @@ const DEFAULT_FIVE_SIM_COUNTRY_ORDER = Object.freeze(['thailand']);
 const DEFAULT_FIVE_SIM_OPERATOR = 'any';
 const DEFAULT_FIVE_SIM_PRODUCT = 'openai';
 const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([1]);
-const DEFAULT_NEX_SMS_SERVICE_CODE = 'ot';
+const DEFAULT_NEX_SMS_SERVICE_CODE = 'dr';
 const DEFAULT_SMS_BOWER_COUNTRY_ORDER = Object.freeze([12, 187, 19, 38, 7, 52]);
 const DEFAULT_SMS_BOWER_SERVICE_CODE = 'dr';
 const SMS_BOWER_SUPPORTED_COUNTRY_ITEMS = Object.freeze([
@@ -1220,6 +1220,8 @@ const DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL = 'https://sms-verification-numbe
 const DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE = 'dr';
 const DEFAULT_SMS_VERIFICATION_NUMBER_COUNTRY_ID = DEFAULT_HERO_SMS_COUNTRY_ID;
 const DEFAULT_SMS_VERIFICATION_NUMBER_COUNTRY_LABEL = DEFAULT_HERO_SMS_COUNTRY_LABEL;
+const DEFAULT_GRIZZLY_SMS_SERVICE_CODE = 'dr';
+const DEFAULT_SMSPOOL_SERVICE_CODE = '671';
 const DEFAULT_SMSPOOL_COUNTRY_ID = 1;
 const DEFAULT_SMSPOOL_COUNTRY_LABEL = 'United States';
 const DEFAULT_FIVE_SIM_COUNTRY_ID = 'vietnam';
@@ -4224,7 +4226,7 @@ function collectSettingsPayload() {
     : 'openai';
   const defaultNexSmsServiceCode = typeof DEFAULT_NEX_SMS_SERVICE_CODE !== 'undefined'
     ? DEFAULT_NEX_SMS_SERVICE_CODE
-    : 'ot';
+    : 'dr';
   const defaultSmsBowerServiceCode = typeof DEFAULT_SMS_BOWER_SERVICE_CODE !== 'undefined'
     ? DEFAULT_SMS_BOWER_SERVICE_CODE
     : 'dr';
@@ -4285,6 +4287,18 @@ function collectSettingsPayload() {
   const smsBowerServiceCodeValue = typeof inputSmsBowerServiceCode !== 'undefined' && inputSmsBowerServiceCode
     ? normalizeSmsBowerServiceCodeForPayload(inputSmsBowerServiceCode.value || latestState?.smsBowerServiceCode)
     : normalizeSmsBowerServiceCodeForPayload(latestState?.smsBowerServiceCode || defaultSmsBowerServiceCode);
+  const smsVerificationNumberServiceCodeValue = normalizeHandlerApiServiceCodeValue(
+    latestState?.smsVerificationNumberServiceCode,
+    DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE
+  );
+  const grizzlySmsServiceCodeValue = normalizeHandlerApiServiceCodeValue(
+    latestState?.grizzlySmsServiceCode,
+    DEFAULT_GRIZZLY_SMS_SERVICE_CODE
+  );
+  const smsPoolServiceCodeValue = normalizeHandlerApiServiceCodeValue(
+    latestState?.smsPoolServiceCode,
+    DEFAULT_SMSPOOL_SERVICE_CODE
+  );
   const heroSmsPreferredPriceValue = typeof inputHeroSmsPreferredPrice !== 'undefined' && inputHeroSmsPreferredPrice
     ? normalizeHeroSmsMaxPriceValue(inputHeroSmsPreferredPrice.value)
     : normalizeHeroSmsMaxPriceValue(latestState?.heroSmsPreferredPrice || '');
@@ -4843,11 +4857,11 @@ function collectSettingsPayload() {
     smsBowerServiceCode: smsBowerServiceCodeValue,
     smsVerificationNumberApiKey: smsVerificationNumberApiKeyValue,
     smsVerificationNumberBaseUrl: latestState?.smsVerificationNumberBaseUrl || DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL,
-    smsVerificationNumberServiceCode: latestState?.smsVerificationNumberServiceCode || DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE,
+    smsVerificationNumberServiceCode: smsVerificationNumberServiceCodeValue,
     grizzlySmsApiKey: grizzlySmsApiKeyValue,
-    grizzlySmsServiceCode: latestState?.grizzlySmsServiceCode || 'dr',
+    grizzlySmsServiceCode: grizzlySmsServiceCodeValue,
     smsPoolApiKey: smsPoolApiKeyValue,
-    smsPoolServiceCode: latestState?.smsPoolServiceCode || '671',
+    smsPoolServiceCode: smsPoolServiceCodeValue,
     phoneSmsReuseEnabled: phoneSmsReuseEnabledValue,
     heroSmsReuseEnabled: heroSmsReuseEnabledValue,
     freePhoneReuseEnabled: freePhoneReuseEnabledValue,
@@ -5305,6 +5319,18 @@ function resolveNormalizedProviderOrderForRuntime(state = {}) {
   return [selectedProvider];
 }
 
+function buildPhoneSmsProviderOrderAfterProviderSwitch(nextProvider, currentOrder = []) {
+  const normalizedNextProvider = normalizePhoneSmsProviderValue(nextProvider || DEFAULT_PHONE_SMS_PROVIDER);
+  if (normalizedNextProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
+    return [];
+  }
+  const normalizedCurrentOrder = normalizePhoneSmsProviderOrderValue(currentOrder, []);
+  return normalizePhoneSmsProviderOrderValue([
+    normalizedNextProvider,
+    ...normalizedCurrentOrder.filter((provider) => provider !== normalizedNextProvider),
+  ], []);
+}
+
 function setPhoneSmsProviderOrderMenuOpen(open) {
   const nextOpen = Boolean(open);
   if (btnPhoneSmsProviderOrderMenu) {
@@ -5567,7 +5593,32 @@ function normalizeNexSmsServiceCodeValue(value = '') {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '');
-  return normalized || DEFAULT_NEX_SMS_SERVICE_CODE;
+  return normalized && normalized !== 'ot' && normalized !== 'any'
+    ? normalized
+    : DEFAULT_NEX_SMS_SERVICE_CODE;
+}
+
+function normalizeHandlerApiServiceCodeValue(value = '', fallback = DEFAULT_SMS_BOWER_SERVICE_CODE) {
+  const fallbackNormalized = String(fallback || DEFAULT_SMS_BOWER_SERVICE_CODE)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '');
+  const safeFallback = fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+    ? fallbackNormalized
+    : DEFAULT_SMS_BOWER_SERVICE_CODE;
+  if (typeof window !== 'undefined' && window.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode) {
+    const providerNormalized = window.PhoneSmsBowerProvider.normalizeSmsBowerServiceCode(value, safeFallback);
+    return providerNormalized && providerNormalized !== 'ot' && providerNormalized !== 'any'
+      ? providerNormalized
+      : safeFallback;
+  }
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '');
+  return normalized && normalized !== 'ot' && normalized !== 'any'
+    ? normalized
+    : safeFallback;
 }
 
 function normalizeFiveSimCountryLabel(value = '', fallback = 'Thailand') {
@@ -5689,14 +5740,7 @@ function normalizeSmsBowerCountryOrderValue(value = []) {
 }
 
 function normalizeSmsBowerServiceCodeValue(value = '') {
-  if (typeof window !== 'undefined' && window.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode) {
-    return window.PhoneSmsBowerProvider.normalizeSmsBowerServiceCode(value, DEFAULT_SMS_BOWER_SERVICE_CODE);
-  }
-  const normalized = String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '');
-  return normalized || DEFAULT_SMS_BOWER_SERVICE_CODE;
+  return normalizeHandlerApiServiceCodeValue(value, DEFAULT_SMS_BOWER_SERVICE_CODE);
 }
 
 function normalizeSmsBowerCountryLabel(value = '', fallbackId = 12) {
@@ -9206,7 +9250,10 @@ async function previewHeroSmsPriceTiers() {
           const url = new URL(DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL);
           url.searchParams.set('api_key', apiKey);
           url.searchParams.set('action', 'getPrices');
-          url.searchParams.set('service', String(latestState?.smsVerificationNumberServiceCode || DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE).trim() || DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE);
+          url.searchParams.set('service', normalizeHandlerApiServiceCodeValue(
+            latestState?.smsVerificationNumberServiceCode,
+            DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE
+          ));
           url.searchParams.set('country', String(country.id));
           url.searchParams.set('lang', 'en');
           const response = await fetch(url.toString(), { cache: 'no-store' });
@@ -9289,7 +9336,10 @@ async function previewHeroSmsPriceTiers() {
           const url = new URL('https://api.grizzlysms.com/stubs/handler_api.php');
           url.searchParams.set('api_key', apiKey);
           url.searchParams.set('action', 'getPricesV3');
-          url.searchParams.set('service', String(latestState?.grizzlySmsServiceCode || 'dr').trim() || 'dr');
+          url.searchParams.set('service', normalizeHandlerApiServiceCodeValue(
+            latestState?.grizzlySmsServiceCode,
+            DEFAULT_GRIZZLY_SMS_SERVICE_CODE
+          ));
           url.searchParams.set('country', String(country.id));
           const response = await fetch(url.toString(), { cache: 'no-store' });
           const rawText = await response.text();
@@ -9371,7 +9421,10 @@ async function previewHeroSmsPriceTiers() {
           const url = new URL('https://api.smspool.net/stubs/handler_api.php?setting=smspool');
           url.searchParams.set('api_key', apiKey);
           url.searchParams.set('action', 'getPrices');
-          url.searchParams.set('service', String(latestState?.smsPoolServiceCode || '671').trim() || '671');
+          url.searchParams.set('service', normalizeHandlerApiServiceCodeValue(
+            latestState?.smsPoolServiceCode,
+            DEFAULT_SMSPOOL_SERVICE_CODE
+          ));
           url.searchParams.set('country', String(country.id));
           const response = await fetch(url.toString(), { cache: 'no-store' });
           const rawText = await response.text();
@@ -10309,12 +10362,9 @@ function updatePhoneVerificationSettingsUI() {
   const grizzlySmsProviderValue = typeof PHONE_SMS_PROVIDER_GRIZZLYSMS !== 'undefined' ? PHONE_SMS_PROVIDER_GRIZZLYSMS : 'grizzlysms';
   const smsPoolProviderValue = typeof PHONE_SMS_PROVIDER_SMSPOOL !== 'undefined' ? PHONE_SMS_PROVIDER_SMSPOOL : 'smspool';
   const chatGptApiProviderValue = typeof PHONE_SMS_PROVIDER_CHATGPT_API !== 'undefined' ? PHONE_SMS_PROVIDER_CHATGPT_API : 'chatgpt-api';
-  const providerOrderForDisplay = resolveNormalizedProviderOrderForRuntime(latestState || {});
-  const provider = providerOrderForDisplay[0] || (
-    typeof getSelectedPhoneSmsProvider === 'function'
-      ? getSelectedPhoneSmsProvider()
-      : normalizeProvider(selectPhoneSmsProvider?.value || latestState?.phoneSmsProvider || heroProviderValue)
-  );
+  const provider = typeof getSelectedPhoneSmsProvider === 'function'
+    ? getSelectedPhoneSmsProvider()
+    : normalizeProvider(selectPhoneSmsProvider?.value || latestState?.phoneSmsProvider || heroProviderValue);
   const heroProvider = provider === heroProviderValue;
   const fiveSimProvider = provider === fiveSimProviderValue;
   const nexSmsProvider = provider === nexSmsProviderValue;
@@ -12089,7 +12139,7 @@ function applySettingsState(state) {
     : 'openai';
   const defaultNexSmsServiceCode = typeof DEFAULT_NEX_SMS_SERVICE_CODE !== 'undefined'
     ? DEFAULT_NEX_SMS_SERVICE_CODE
-    : 'ot';
+    : 'dr';
   setPhoneSmsProviderSelectValue(restoredPhoneSmsProvider);
   const restoredPhoneSmsProviderOrder = typeof applyPhoneSmsProviderOrderSelection === 'function'
     ? applyPhoneSmsProviderOrderSelection(state?.phoneSmsProviderOrder || [], {
@@ -17445,6 +17495,10 @@ async function switchPhoneSmsProvider(nextProvider) {
 
   const patch = {
     phoneSmsProvider: normalizedNextProvider,
+    phoneSmsProviderOrder: buildPhoneSmsProviderOrderAfterProviderSwitch(
+      normalizedNextProvider,
+      phoneSmsProviderOrderSelection || latestState?.phoneSmsProviderOrder || []
+    ),
   };
   if (previousProvider === PHONE_SMS_PROVIDER_FIVE_SIM) {
     patch.fiveSimApiKey = currentFiveSimApiKey || currentApiKey;
@@ -17485,6 +17539,7 @@ async function switchPhoneSmsProvider(nextProvider) {
     patch.smsVerificationNumberCountryId = currentPrimary.id;
     patch.smsVerificationNumberCountryLabel = currentPrimary.label;
     patch.smsVerificationNumberCountryFallback = currentFallback;
+    patch.smsVerificationNumberServiceCode = normalizeHandlerApiServiceCodeValue(latestState?.smsVerificationNumberServiceCode, DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE);
   } else if (previousProvider === PHONE_SMS_PROVIDER_GRIZZLYSMS) {
     patch.grizzlySmsApiKey = currentApiKey;
     patch.grizzlySmsMaxPrice = currentMaxPrice;
@@ -17493,6 +17548,7 @@ async function switchPhoneSmsProvider(nextProvider) {
     patch.grizzlySmsCountryId = currentPrimary.id;
     patch.grizzlySmsCountryLabel = currentPrimary.label;
     patch.grizzlySmsCountryFallback = currentFallback;
+    patch.grizzlySmsServiceCode = normalizeHandlerApiServiceCodeValue(latestState?.grizzlySmsServiceCode, DEFAULT_GRIZZLY_SMS_SERVICE_CODE);
   } else if (previousProvider === PHONE_SMS_PROVIDER_SMSPOOL) {
     patch.smsPoolApiKey = currentApiKey;
     patch.smsPoolMaxPrice = currentMaxPrice;
@@ -17501,6 +17557,7 @@ async function switchPhoneSmsProvider(nextProvider) {
     patch.smsPoolCountryId = currentPrimary.id;
     patch.smsPoolCountryLabel = currentPrimary.label;
     patch.smsPoolCountryFallback = currentFallback;
+    patch.smsPoolServiceCode = normalizeHandlerApiServiceCodeValue(latestState?.smsPoolServiceCode, DEFAULT_SMSPOOL_SERVICE_CODE);
   } else if (previousProvider === PHONE_SMS_PROVIDER_CHATGPT_API) {
     // ChatGPT API 接码池不复用 API Key / 国家 / 价格输入框状态。
   } else if (previousProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
@@ -17518,6 +17575,14 @@ async function switchPhoneSmsProvider(nextProvider) {
 
   syncLatestState(patch);
   setPhoneSmsProviderSelectValue(normalizedNextProvider);
+  if (normalizedNextProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
+    clearPhoneSmsProviderOrderSelection({ syncProvider: false });
+  } else {
+    applyPhoneSmsProviderOrderSelection(latestState?.phoneSmsProviderOrder || [], {
+      ensureDefault: false,
+      syncProvider: false,
+    });
+  }
   heroSmsCountrySelectionOrder = [];
   nexSmsCountrySelectionOrder = [];
   smsBowerCountrySelectionOrder = [];
@@ -17625,7 +17690,7 @@ async function switchPhoneSmsProvider(nextProvider) {
       Array.isArray(latestState?.smsBowerCountryOrder) ? latestState.smsBowerCountryOrder : DEFAULT_SMS_BOWER_COUNTRY_ORDER
     );
   } else if (normalizedNextProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
-    clearPhoneSmsProviderOrderSelection({ syncProvider: false });
+    // Hosted SMS is configured by its own number pool and does not use provider fallback order.
   } else {
     await loadHeroSmsCountries().catch(() => { });
     if (typeof applyHeroSmsFallbackSelection === 'function') {
@@ -17718,55 +17783,6 @@ inputPhoneSignupReloginAfterBindEmail?.addEventListener('change', () => {
     phoneSignupReloginAfterBindEmailEnabled: Boolean(inputPhoneSignupReloginAfterBindEmail.checked),
   });
   updatePhoneVerificationSettingsUI();
-  markSettingsDirty(true);
-  saveSettings({ silent: true }).catch(() => { });
-});
-
-selectPhoneSmsProvider?.addEventListener('change', async () => {
-  if (selectPhoneSmsProvider) {
-    selectPhoneSmsProvider.value = normalizePhoneSmsProviderValue(selectPhoneSmsProvider.value);
-  }
-  if (selectPhoneSmsProvider?.value === PHONE_SMS_PROVIDER_FIVE_SIM) {
-    await loadFiveSimCountries().catch(() => { });
-    applyFiveSimCountrySelection(
-      Array.isArray(latestState?.fiveSimCountryOrder) ? latestState.fiveSimCountryOrder : []
-    );
-  } else if (selectPhoneSmsProvider?.value === PHONE_SMS_PROVIDER_NEXSMS) {
-    await loadNexSmsCountries().catch(() => { });
-    applyNexSmsCountrySelection(
-      Array.isArray(latestState?.nexSmsCountryOrder) ? latestState.nexSmsCountryOrder : []
-    );
-  } else if (selectPhoneSmsProvider?.value === PHONE_SMS_PROVIDER_SMSBOWER) {
-    await loadSmsBowerCountries().catch(() => { });
-    applySmsBowerCountrySelection(
-      Array.isArray(latestState?.smsBowerCountryOrder) ? latestState.smsBowerCountryOrder : DEFAULT_SMS_BOWER_COUNTRY_ORDER
-    );
-  } else if (selectPhoneSmsProvider?.value === PHONE_SMS_PROVIDER_HOSTED_SMS) {
-    clearPhoneSmsProviderOrderSelection({ syncProvider: false });
-  } else {
-    await loadHeroSmsCountries().catch(() => { });
-    const nextPrimaryCountryId = normalizeHeroSmsCountryId(latestState?.heroSmsCountryId, 0);
-    const nextPrimaryCountries = nextPrimaryCountryId > 0
-      ? [{
-        id: nextPrimaryCountryId,
-        label: normalizeHeroSmsCountryLabel(latestState?.heroSmsCountryLabel),
-      }]
-      : [];
-    applyHeroSmsFallbackSelection(
-      [
-        ...nextPrimaryCountries,
-        ...normalizeHeroSmsCountryFallbackList(
-          Array.isArray(latestState?.heroSmsCountryFallback) ? latestState.heroSmsCountryFallback : []
-        ),
-      ],
-      { includePrimary: true }
-    );
-  }
-  updateHeroSmsPlatformDisplay();
-  updatePhoneVerificationSettingsUI();
-  if (rowHeroSmsPriceTiers) {
-    rowHeroSmsPriceTiers.style.display = 'none';
-  }
   markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
 });

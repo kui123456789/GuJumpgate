@@ -143,9 +143,11 @@
 
   function normalizeSmsBowerServiceCode(value = '', fallback = DEFAULT_SERVICE_CODE) {
     const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '');
-    if (normalized) return normalized;
+    if (normalized && normalized !== 'ot' && normalized !== 'any') return normalized;
     const fallbackNormalized = String(fallback || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '');
-    return fallbackNormalized || DEFAULT_SERVICE_CODE;
+    return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+      ? fallbackNormalized
+      : DEFAULT_SERVICE_CODE;
   }
 
   function normalizeSmsBowerLang(value = '', fallback = DEFAULT_LANG) {
@@ -290,7 +292,7 @@
   }
 
   function getServiceCode(state = {}) {
-    return normalizeSmsBowerServiceCode(state.smsBowerServiceCode || DEFAULT_SERVICE_CODE);
+    return normalizeSmsBowerServiceCode(state.smsBowerServiceCode, DEFAULT_SERVICE_CODE);
   }
 
   function getPriceBounds(state = {}) {

@@ -10,7 +10,7 @@
   const PROVIDER_LABEL = '托管短信接口';
   const DEFAULT_SERVICE_CODE = 'openai';
   const DEFAULT_COUNTRY_ID = 'US';
-  const DEFAULT_COUNTRY_LABEL = 'United States';
+  const DEFAULT_COUNTRY_LABEL = 'United States (+1)';
   const DEFAULT_POOL_ENTRY_MAX_USES = 3;
   const PHONE_CODE_TIMEOUT_ERROR_PREFIX = 'PHONE_CODE_TIMEOUT::';
   const TRUSTED_TEXT_KEYS = new Set([

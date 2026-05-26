@@ -26,7 +26,7 @@
       DEFAULT_FIVE_SIM_COUNTRY_ORDER = ['thailand'],
       DEFAULT_NEX_SMS_BASE_URL = 'https://api.nexsms.net',
       DEFAULT_NEX_SMS_COUNTRY_ORDER = [1],
-      DEFAULT_NEX_SMS_SERVICE_CODE = 'ot',
+      DEFAULT_NEX_SMS_SERVICE_CODE = 'dr',
       DEFAULT_SMSBOWER_BASE_URL = 'https://smsbower.page/stubs/handler_api.php',
       DEFAULT_SMSBOWER_SERVICE_CODE = 'dr',
       DEFAULT_SMS_BOWER_COUNTRY_ORDER = [12, 187, 19, 38, 7, 52],
@@ -320,14 +320,16 @@
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '');
-      if (normalized) {
+      if (normalized && normalized !== 'ot' && normalized !== 'any') {
         return normalized;
       }
       const fallbackNormalized = String(fallback || '')
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '');
-      return fallbackNormalized || 'ot';
+      return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+        ? fallbackNormalized
+        : 'dr';
     }
 
     function normalizeSmsBowerServiceCode(value = '', fallback = DEFAULT_SMSBOWER_SERVICE_CODE) {
@@ -339,14 +341,16 @@
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '');
-      if (normalized) {
+      if (normalized && normalized !== 'ot' && normalized !== 'any') {
         return normalized;
       }
       const fallbackNormalized = String(fallback || '')
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '');
-      return fallbackNormalized || 'dr';
+      return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+        ? fallbackNormalized
+        : 'dr';
     }
 
     function normalizeFiveSimCountryCode(value = '', fallback = 'thailand') {
@@ -1749,7 +1753,7 @@
           ? {
             countryLabel: countryLabel || (
               provider === PHONE_SMS_PROVIDER_HOSTED_SMS
-                ? 'United States'
+                ? 'United States (+1)'
                 : (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryLabel
                   ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryLabel('', countryId)
                   : `Country #${countryId}`)
@@ -2513,7 +2517,7 @@
           poolText: String(state.hostedSmsPoolText || '').trim(),
           usage: state.hostedSmsPoolUsage || {},
           currentEntry: state.hostedSmsCurrentEntry || null,
-          countryCandidates: [{ id: 'US', label: 'United States' }],
+          countryCandidates: [{ id: 'US', label: 'United States (+1)' }],
         };
       }
 
@@ -5326,7 +5330,7 @@
         return DEFAULT_SMS_BOWER_COUNTRY_ORDER.map((id) => ({ id, label: `Country #${id}` }));
       }
       if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_HOSTED_SMS) {
-        return [{ id: 'US', label: 'United States' }];
+        return [{ id: 'US', label: 'United States (+1)' }];
       }
       if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_SMSBOWER) {
         const provider = getSmsBowerProviderForState(state);
@@ -5403,7 +5407,7 @@
         } else if (providerId === PHONE_SMS_PROVIDER_HOSTED_SMS) {
           return {
             id: 'US',
-            label: 'United States',
+            label: 'United States (+1)',
           };
         } else if (providerId === PHONE_SMS_PROVIDER_SMSBOWER) {
           const rootScope = typeof self !== 'undefined' ? self : globalThis;
@@ -7302,7 +7306,7 @@
           return matched?.label || `Country #${normalizedCountryId}`;
         }
         if (normalizedProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
-          return 'United States';
+          return 'United States (+1)';
         }
         const normalizedCountryId = normalizeCountryId(normalizedCountryKey, 0);
         const matched = resolveCountryCandidates(state)

@@ -674,7 +674,7 @@ const DEFAULT_FIVE_SIM_PRODUCT = 'openai';
 const DEFAULT_FIVE_SIM_OPERATOR = 'any';
 const DEFAULT_FIVE_SIM_COUNTRY_ORDER = Object.freeze(['thailand']);
 const DEFAULT_NEX_SMS_BASE_URL = 'https://api.nexsms.net';
-const DEFAULT_NEX_SMS_SERVICE_CODE = 'ot';
+const DEFAULT_NEX_SMS_SERVICE_CODE = 'dr';
 const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([1]);
 const DEFAULT_SMSBOWER_BASE_URL = 'https://smsbower.page/stubs/handler_api.php';
 const DEFAULT_SMSBOWER_SERVICE_CODE = 'dr';
@@ -2215,14 +2215,16 @@ function normalizeNexSmsServiceCode(value = '', fallback = DEFAULT_NEX_SMS_SERVI
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '');
-  if (normalized) {
+  if (normalized && normalized !== 'ot' && normalized !== 'any') {
     return normalized;
   }
   const fallbackNormalized = String(fallback || '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '');
-  return fallbackNormalized || DEFAULT_NEX_SMS_SERVICE_CODE;
+  return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+    ? fallbackNormalized
+    : DEFAULT_NEX_SMS_SERVICE_CODE;
 }
 
 function normalizeSmsBowerCountryId(value, fallback = 187) {
@@ -2279,14 +2281,16 @@ function normalizeSmsBowerServiceCode(value = '', fallback = DEFAULT_SMS_BOWER_S
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '');
-  if (normalized) {
+  if (normalized && normalized !== 'ot' && normalized !== 'any') {
     return normalized;
   }
   const fallbackNormalized = String(fallback || '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '');
-  return fallbackNormalized || DEFAULT_SMS_BOWER_SERVICE_CODE;
+  return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+    ? fallbackNormalized
+    : DEFAULT_SMS_BOWER_SERVICE_CODE;
 }
 
 function normalizePhonePreferredActivation(value) {
