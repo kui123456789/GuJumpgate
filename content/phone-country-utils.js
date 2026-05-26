@@ -56,6 +56,14 @@
 
     const raw = String(value || '').trim();
     addAlias(raw);
+    Array.from(raw.matchAll(/\(([^()]+)\)/g))
+      .map((match) => match[1])
+      .forEach(addAlias);
+    const withoutParentheses = raw.replace(/\([^()]*\)/g, ' ');
+    const withoutDialCodes = withoutParentheses
+      .replace(/\+\s*\d{1,4}\b/g, ' ')
+      .replace(/\(\s*\+\s*\d{1,4}\s*\)/g, ' ');
+    addAlias(withoutDialCodes);
 
     const normalized = normalizeCountryLabel(raw);
     const compact = normalized.replace(/\s+/g, '');
@@ -79,6 +87,16 @@
     }
 
     return Array.from(aliases);
+  }
+
+  function isLooseCountryLabelMatch(optionLabel, targetLabel) {
+    if (!optionLabel || !targetLabel || optionLabel.length <= 2 || targetLabel.length <= 2) {
+      return false;
+    }
+    if (optionLabel.includes(targetLabel)) {
+      return true;
+    }
+    return /\s/.test(optionLabel) && targetLabel.includes(optionLabel);
   }
 
   function getRegionDisplayName(regionCode, locale) {
@@ -168,9 +186,7 @@
           .map((label) => normalizeCountryLabel(label))
           .filter(Boolean);
         return normalizedLabels.some((optionLabel) => normalizedTargets.some((normalizedTarget) => (
-          optionLabel.length > 2
-          && normalizedTarget.length > 2
-          && (optionLabel.includes(normalizedTarget) || normalizedTarget.includes(optionLabel))
+          isLooseCountryLabelMatch(optionLabel, normalizedTarget)
         )));
       })
       || null;
@@ -229,6 +245,7 @@
     getOptionLabel,
     getOptionMatchLabels,
     getRegionDisplayName,
+    isLooseCountryLabelMatch,
     normalizeCountryLabel,
     normalizeCountryOptionValue,
     normalizePhoneDigits,

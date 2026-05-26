@@ -29,6 +29,8 @@
       DEFAULT_NEX_SMS_SERVICE_CODE = 'ot',
       DEFAULT_SMSBOWER_BASE_URL = 'https://smsbower.page/stubs/handler_api.php',
       DEFAULT_SMSBOWER_SERVICE_CODE = 'dr',
+      DEFAULT_SMS_BOWER_COUNTRY_ORDER = [12, 187, 19, 38, 7, 52],
+      DEFAULT_SMS_BOWER_SERVICE_CODE = DEFAULT_SMSBOWER_SERVICE_CODE,
       DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL = 'https://sms-verification-number.com/stubs/handler_api',
       DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE = 'dr',
       DEFAULT_GRIZZLY_SMS_BASE_URL = 'https://api.grizzlysms.com/stubs/handler_api.php',
@@ -37,9 +39,9 @@
       DEFAULT_SMSPOOL_SERVICE_CODE = '671',
       DEFAULT_HERO_SMS_REUSE_ENABLED = true,
       createFiveSimProvider = null,
+      createSmsBowerProvider = null,
       createHostedSmsProvider = null,
       createNexSmsProvider = null,
-      createSmsBowerProvider = null,
       createSmsVerificationNumberProvider = null,
       createGrizzlySmsProvider = null,
       createSmsPoolProvider = null,
@@ -114,6 +116,26 @@
       PHONE_SMS_PROVIDER_GRIZZLYSMS,
       PHONE_SMS_PROVIDER_SMSPOOL,
       PHONE_SMS_PROVIDER_CHATGPT_API,
+    ]);
+    const SMSBOWER_COUNTRY_DIAL_PREFIX_BY_ID = Object.freeze({
+      12: '1',
+      187: '1',
+      19: '234',
+      38: '233',
+      7: '60',
+      52: '66',
+      6: '62',
+      10: '84',
+    });
+    const SMSBOWER_KNOWN_DIAL_PREFIXES = Object.freeze([
+      '234',
+      '233',
+      '227',
+      '66',
+      '62',
+      '60',
+      '84',
+      '1',
     ]);
     const MAX_PHONE_REUSABLE_POOL = 12;
     const PHONE_CODE_TIMEOUT_ERROR_PREFIX = 'PHONE_CODE_TIMEOUT::';
@@ -224,11 +246,11 @@
       if (normalized === PHONE_SMS_PROVIDER_NEXSMS) {
         return PHONE_SMS_PROVIDER_NEXSMS;
       }
-      if (normalized === PHONE_SMS_PROVIDER_HOSTED_SMS) {
-        return PHONE_SMS_PROVIDER_HOSTED_SMS;
-      }
       if (normalized === PHONE_SMS_PROVIDER_SMSBOWER) {
         return PHONE_SMS_PROVIDER_SMSBOWER;
+      }
+      if (normalized === PHONE_SMS_PROVIDER_HOSTED_SMS) {
+        return PHONE_SMS_PROVIDER_HOSTED_SMS;
       }
       if (normalized === PHONE_SMS_PROVIDER_SMS_VERIFICATION_NUMBER) {
         return PHONE_SMS_PROVIDER_SMS_VERIFICATION_NUMBER;
@@ -389,6 +411,73 @@
 
     function normalizePhoneDigits(value) {
       return String(value || '').replace(/\D+/g, '');
+    }
+
+    function extractPhoneDialPrefixFromText(value = '') {
+      const match = String(value || '').match(/\(\+\s*(\d{1,4})\s*\)|\+\s*\(\s*(\d{1,4})\s*\)|\+\s*(\d{1,4})\b/);
+      return String(match?.[1] || match?.[2] || match?.[3] || '').trim();
+    }
+
+    function resolveKnownSmsBowerPhoneDialPrefix(value = '') {
+      const digits = normalizePhoneDigits(value);
+      if (!digits) {
+        return '';
+      }
+      return SMSBOWER_KNOWN_DIAL_PREFIXES
+        .find((prefix) => digits.startsWith(prefix) && digits.length > prefix.length) || '';
+    }
+
+    function resolveSmsBowerActivationExpectedDialPrefix(activation = {}) {
+      const labelPrefix = extractPhoneDialPrefixFromText(activation?.countryLabel);
+      if (labelPrefix) {
+        return labelPrefix;
+      }
+
+      const rootScope = typeof self !== 'undefined' ? self : globalThis;
+      const normalizedCountryId = rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId
+        ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(activation?.countryId, 0)
+        : normalizeCountryId(activation?.countryId, 0);
+      const providerCountry = Array.isArray(rootScope.PhoneSmsBowerProvider?.SUPPORTED_COUNTRY_ITEMS)
+        ? rootScope.PhoneSmsBowerProvider.SUPPORTED_COUNTRY_ITEMS
+          .find((entry) => Number(entry?.id) === Number(normalizedCountryId))
+        : null;
+      const providerPrefix = normalizePhoneDigits(providerCountry?.phonePrefix);
+      if (providerPrefix) {
+        return providerPrefix;
+      }
+      return SMSBOWER_COUNTRY_DIAL_PREFIX_BY_ID[normalizedCountryId] || '';
+    }
+
+    function getSmsBowerActivationDialMismatch(activationCandidate) {
+      const activation = normalizeActivation(activationCandidate);
+      if (!activation || activation.provider !== PHONE_SMS_PROVIDER_SMSBOWER) {
+        return null;
+      }
+
+      const expectedPrefix = resolveSmsBowerActivationExpectedDialPrefix(activation);
+      if (!expectedPrefix) {
+        return null;
+      }
+
+      const rawDigits = normalizePhoneDigits(activation.rawPhoneNumber);
+      const phoneDigits = normalizePhoneDigits(activation.phoneNumber);
+      const sourceDigits = rawDigits || phoneDigits;
+      if (!sourceDigits || sourceDigits.startsWith(expectedPrefix)) {
+        return null;
+      }
+
+      const actualPrefix = resolveKnownSmsBowerPhoneDialPrefix(sourceDigits);
+      if (!actualPrefix || actualPrefix === expectedPrefix) {
+        return null;
+      }
+
+      return {
+        expectedPrefix,
+        actualPrefix,
+        phoneNumber: activation.phoneNumber,
+        countryId: activation.countryId,
+        countryLabel: activation.countryLabel || '',
+      };
     }
 
     function phoneNumbersMatch(left, right) {
@@ -584,6 +673,14 @@
       return /phone\s+number\s+is\s+not\s+valid|invalid\s+phone\s+number|invalid\s+phone|not\s+a\s+valid\s+phone|号码.*无效|手机号.*无效|电话号码.*无效/i.test(text);
     }
 
+    function isPhoneNumberVirtualPhoneError(value) {
+      const text = String(value || '').trim();
+      if (!text) {
+        return false;
+      }
+      return /voip|voice\s*over\s*ip|non[-\s]*virtual|(?:virtual|internet|online)\s+(?:phone\s+)?number|(?:phone\s+)?number.{0,80}(?:virtual|voip)|虚拟.*(?:电话(?:号码)?|手机号|号码)|(?:电话(?:号码)?|手机号|号码).*虚拟|非虚拟/i.test(text);
+    }
+
     function isPhoneNumberDeliveryRefusedError(value) {
       const text = String(value || '').trim();
       if (!text) {
@@ -616,7 +713,7 @@
       }
       return (
         isPhoneNumberInvalidError(text)
-        || /failed\s+to\s+select\b.*add-phone\s+page|missing\s+the\s+country\s+option|could\s+not\s+determine\s+the\s+dial\s+code|add-phone\s+page\s+is\s+missing\s+the\s+phone\s+number\s+input|add-phone\s+page\s+is\s+missing\s+the\s+submit\s+button/i.test(text)
+        || /failed\s+to\s+select\b.*add-phone\s+page|country\s+dial\s+code\s+mismatch|missing\s+the\s+country\s+option|could\s+not\s+determine\s+the\s+dial\s+code|add-phone\s+page\s+is\s+missing\s+the\s+phone\s+number\s+input|add-phone\s+page\s+is\s+missing\s+the\s+submit\s+button/i.test(text)
       );
     }
 
@@ -1028,6 +1125,9 @@
       }
       if (provider === PHONE_SMS_PROVIDER_NEXSMS) {
         return 'NexSMS';
+      }
+      if (provider === PHONE_SMS_PROVIDER_SMSBOWER) {
+        return 'SMSBower';
       }
       if (provider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
         return '托管短信接口';
@@ -1585,7 +1685,11 @@
       const rawCountryId = record.countryId ?? record.country;
       const fallbackCountryId = provider === PHONE_SMS_PROVIDER_FIVE_SIM
         ? 'england'
-        : (provider === PHONE_SMS_PROVIDER_HOSTED_SMS ? 'US' : HERO_SMS_COUNTRY_ID);
+        : (
+          provider === PHONE_SMS_PROVIDER_SMSBOWER
+            ? 12
+            : (provider === PHONE_SMS_PROVIDER_HOSTED_SMS ? 'US' : HERO_SMS_COUNTRY_ID)
+        );
       const expiresAt = normalizeTimestampMs(record.expiresAt);
       const serviceCode = String(
         record.serviceCode
@@ -1598,7 +1702,7 @@
                   provider === PHONE_SMS_PROVIDER_HOSTED_SMS
                     ? 'openai'
                     : (provider === PHONE_SMS_PROVIDER_SMSBOWER
-                      ? DEFAULT_SMSBOWER_SERVICE_CODE
+                      ? DEFAULT_SMS_BOWER_SERVICE_CODE
                       : (
                         provider === PHONE_SMS_PROVIDER_GRIZZLYSMS
                           ? DEFAULT_GRIZZLY_SMS_SERVICE_CODE
@@ -1609,18 +1713,24 @@
                 ))
         )
       ).trim();
+      const rootScope = typeof self !== 'undefined' ? self : globalThis;
       const countryId = provider === PHONE_SMS_PROVIDER_FIVE_SIM
         ? normalizeFiveSimCountryId(record.countryCode ?? rawCountryId, fallbackCountryId)
         : (
           provider === PHONE_SMS_PROVIDER_NEXSMS
             ? normalizeNexSmsCountryId(rawCountryId, 0)
             : (
-              provider === PHONE_SMS_PROVIDER_HOSTED_SMS
+              provider === PHONE_SMS_PROVIDER_SMSBOWER
+                ? (
+                  rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId
+                    ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(rawCountryId, fallbackCountryId)
+                    : normalizeCountryId(rawCountryId, fallbackCountryId)
+                )
+                : provider === PHONE_SMS_PROVIDER_HOSTED_SMS
                 ? 'US'
                 : normalizeCountryId(rawCountryId, fallbackCountryId)
             )
         );
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
       const hostedSmsVerificationUrl = provider === PHONE_SMS_PROVIDER_HOSTED_SMS
         ? (
           rootScope.PhoneSmsHostedSmsProvider?.normalizeHostedSmsUrl
@@ -1635,15 +1745,24 @@
         serviceCode,
         countryId,
         ...(provider === PHONE_SMS_PROVIDER_FIVE_SIM ? { countryCode: countryId } : {}),
-        ...(countryLabel || provider === PHONE_SMS_PROVIDER_HOSTED_SMS
-          ? { countryLabel: countryLabel || 'United States' }
+        ...(countryLabel || provider === PHONE_SMS_PROVIDER_HOSTED_SMS || provider === PHONE_SMS_PROVIDER_SMSBOWER
+          ? {
+            countryLabel: countryLabel || (
+              provider === PHONE_SMS_PROVIDER_HOSTED_SMS
+                ? 'United States'
+                : (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryLabel
+                  ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryLabel('', countryId)
+                  : `Country #${countryId}`)
+            ),
+          }
           : {}),
+        ...(record.rawPhoneNumber ? { rawPhoneNumber: String(record.rawPhoneNumber || '').trim() } : {}),
         ...(hostedSmsVerificationUrl ? { verificationUrl: hostedSmsVerificationUrl } : {}),
         ...(provider === PHONE_SMS_PROVIDER_HOSTED_SMS
           ? { hostedSmsPoolKey: String(record.hostedSmsPoolKey || activationId).trim() || activationId }
           : {}),
         successfulUses: normalizeUseCount(record.successfulUses),
-        maxUses: provider === PHONE_SMS_PROVIDER_HOSTED_SMS
+        maxUses: (provider === PHONE_SMS_PROVIDER_HOSTED_SMS || provider === PHONE_SMS_PROVIDER_SMSBOWER)
           ? 1
           : Math.max(1, Math.floor(Number(record.maxUses) || DEFAULT_PHONE_NUMBER_MAX_USES)),
         ...(expiresAt > 0 ? { expiresAt } : {}),
@@ -2370,6 +2489,24 @@
         };
       }
 
+      if (provider === PHONE_SMS_PROVIDER_SMSBOWER) {
+        const apiKey = normalizeApiKey(state.smsBowerApiKey || state.heroSmsApiKey);
+        if (!apiKey) {
+          throw new Error('SMSBower API Key 缺失，请先在侧边栏保存接码 API Key。');
+        }
+        const smsBowerProvider = getSmsBowerProviderForState(state);
+        const countryCandidates = smsBowerProvider?.resolveCountryCandidates
+          ? smsBowerProvider.resolveCountryCandidates(state)
+          : [];
+        return {
+          provider,
+          apiKey,
+          baseUrl: normalizeUrl(state.smsBowerBaseUrl, DEFAULT_SMSBOWER_BASE_URL),
+          serviceCode: normalizeSmsBowerServiceCode(state.smsBowerServiceCode, DEFAULT_SMS_BOWER_SERVICE_CODE),
+          countryCandidates,
+        };
+      }
+
       if (provider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
         return {
           provider,
@@ -2377,20 +2514,6 @@
           usage: state.hostedSmsPoolUsage || {},
           currentEntry: state.hostedSmsCurrentEntry || null,
           countryCandidates: [{ id: 'US', label: 'United States' }],
-        };
-      }
-
-      if (provider === PHONE_SMS_PROVIDER_SMSBOWER) {
-        const apiKey = normalizeApiKey(state.smsBowerApiKey || state.heroSmsApiKey);
-        if (!apiKey) {
-          throw new Error('SMSBower API Key 缺失，请先在侧边栏保存接码 API Key。');
-        }
-        return {
-          provider,
-          apiKey,
-          baseUrl: normalizeUrl(state.smsBowerBaseUrl, DEFAULT_SMSBOWER_BASE_URL),
-          serviceCode: normalizeSmsBowerServiceCode(state.smsBowerServiceCode, DEFAULT_SMSBOWER_SERVICE_CODE),
-          countryCandidates: resolveCountryCandidates(state),
         };
       }
 
@@ -2687,7 +2810,7 @@
       if (!text) {
         return false;
       }
-      return /no\s+numbers\s+available\s+across|no\s+free\s+phones|numbers?\s+not\s+found|no\s+numbers\s+within\s+(?:maxprice|price\s+range)|price\s+range\s+is\s+invalid|step\s*9:\s*(?:5sim|nexsms)\s+countries\s+are\s+empty|暂无可用号码|均无可用号码|无可用号码|价格区间|未选择国家|\bNO_NUMBERS\b/i.test(text);
+      return /no\s+numbers\s+available\s+across|no\s+free\s+phones|numbers?\s+not\s+found|no\s+numbers\s+within\s+(?:maxprice|price\s+range)|price\s+range\s+is\s+invalid|step\s*9:\s*(?:5sim|nexsms|smsbower)\s+countries\s+are\s+empty|暂无可用号码|均无可用号码|无可用号码|价格区间|未选择国家|\bNO_NUMBERS\b/i.test(text);
     }
 
     function resolveNoSupplyDiagnosticsContext(state = {}, providerOrder = []) {
@@ -3973,6 +4096,7 @@
         if (provider) {
           return provider.requestActivation(state, options);
         }
+        throw new Error('SMSBower 模块未加载。');
       }
       if (normalizePhoneSmsProvider(state?.phoneSmsProvider) === PHONE_SMS_PROVIDER_SMS_VERIFICATION_NUMBER) {
         const provider = getSmsVerificationNumberProviderForState(state);
@@ -4351,6 +4475,9 @@
           return provider.reuseActivation(state, normalizedActivation);
         }
       }
+      if (getActivationProviderId(normalizedActivation, state) === PHONE_SMS_PROVIDER_SMSBOWER) {
+        throw new Error('SMSBower 当前流程不支持复用手机号订单。');
+      }
 
       const config = resolvePhoneConfig(state);
       if (config.provider === PHONE_SMS_PROVIDER_5SIM) {
@@ -4408,6 +4535,17 @@
       }
       if (getActivationProviderId(normalizedActivation, state) === PHONE_SMS_PROVIDER_HOSTED_SMS) {
         return 'hosted-sms status update skipped';
+      }
+      if (getActivationProviderId(normalizedActivation, state) === PHONE_SMS_PROVIDER_SMSBOWER) {
+        const provider = getSmsBowerProviderForState(state);
+        if (provider) {
+          if (normalizedStatus === 6 && provider.finishActivation) {
+            return provider.finishActivation(state, normalizedActivation);
+          }
+          if (normalizedStatus === 8 && provider.cancelActivation) {
+            return provider.cancelActivation(state, normalizedActivation);
+          }
+        }
       }
       const config = resolvePhoneConfig(state);
       if (config.provider === PHONE_SMS_PROVIDER_5SIM) {
@@ -4686,6 +4824,10 @@
 
     async function requestAdditionalPhoneSms(state = {}, activation) {
       if (getActivationProviderId(activation, state) === PHONE_SMS_PROVIDER_HOSTED_SMS) {
+        return;
+      }
+      if (getActivationProviderId(activation, state) === PHONE_SMS_PROVIDER_SMSBOWER) {
+        await setPhoneActivationStatus(state, activation, 3, 'SMSBower setStatus(3)');
         return;
       }
       const config = resolvePhoneConfig(state);
@@ -5176,6 +5318,13 @@
         }
         return resolveNexSmsCountryCandidates(state);
       }
+      if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_SMSBOWER) {
+        const provider = getSmsBowerProviderForState(state);
+        if (provider?.resolveCountryCandidates) {
+          return provider.resolveCountryCandidates(state);
+        }
+        return DEFAULT_SMS_BOWER_COUNTRY_ORDER.map((id) => ({ id, label: `Country #${id}` }));
+      }
       if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_HOSTED_SMS) {
         return [{ id: 'US', label: 'United States' }];
       }
@@ -5255,6 +5404,21 @@
           return {
             id: 'US',
             label: 'United States',
+          };
+        } else if (providerId === PHONE_SMS_PROVIDER_SMSBOWER) {
+          const rootScope = typeof self !== 'undefined' ? self : globalThis;
+          const countryId = rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId
+            ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(activation.countryId, 12)
+            : normalizeCountryId(activation.countryId, 12);
+          const matched = candidates.find((entry) => Number(entry.id) === Number(countryId));
+          if (matched) {
+            return matched;
+          }
+          return {
+            id: countryId,
+            label: rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryLabel
+              ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryLabel(activation.countryLabel, countryId)
+              : normalizeCountryLabel(activation.countryLabel, `Country #${countryId}`),
           };
         } else {
           const inferredCountry = inferHeroSmsCountryFromPhoneNumber(activation.phoneNumber);
@@ -5539,6 +5703,7 @@
       const provider = normalizePhoneSmsProvider(state?.phoneSmsProvider || DEFAULT_PHONE_SMS_PROVIDER);
       return provider === PHONE_SMS_PROVIDER_HERO
         || provider === PHONE_SMS_PROVIDER_NEXSMS
+        || provider === PHONE_SMS_PROVIDER_SMSBOWER
         || provider === PHONE_SMS_PROVIDER_5SIM
         || provider === PHONE_SMS_PROVIDER_HOSTED_SMS;
     }
@@ -5723,10 +5888,10 @@
       const providerOrder = resolvePhoneProviderOrder(state, provider);
       const countryCandidates = resolveCountryCandidatesForProvider(state, provider);
       if (
-        (provider === PHONE_SMS_PROVIDER_5SIM || provider === PHONE_SMS_PROVIDER_NEXSMS)
+        (provider === PHONE_SMS_PROVIDER_5SIM || provider === PHONE_SMS_PROVIDER_NEXSMS || provider === PHONE_SMS_PROVIDER_SMSBOWER)
         && !countryCandidates.length
       ) {
-        throw new Error(`步骤 ${getActivePhoneVerificationVisibleStep()}：${provider === PHONE_SMS_PROVIDER_5SIM ? '5sim' : 'NexSMS'} 未选择国家，请先在接码设置中至少选择 1 个国家。`);
+        throw new Error(`步骤 ${getActivePhoneVerificationVisibleStep()}：${getPhoneSmsProviderLabel(provider)} 未选择国家，请先在接码设置中至少选择 1 个国家。`);
       }
       const normalizeCountryKey = (value) => (
         provider === PHONE_SMS_PROVIDER_5SIM
@@ -5735,7 +5900,13 @@
             provider === PHONE_SMS_PROVIDER_NEXSMS
               ? String(normalizeNexSmsCountryId(value, -1))
               : (
-                provider === PHONE_SMS_PROVIDER_HOSTED_SMS
+                provider === PHONE_SMS_PROVIDER_SMSBOWER
+                  ? String(
+                    (typeof self !== 'undefined' ? self : globalThis).PhoneSmsBowerProvider?.normalizeSmsBowerCountryId
+                      ? (typeof self !== 'undefined' ? self : globalThis).PhoneSmsBowerProvider.normalizeSmsBowerCountryId(value, 0)
+                      : normalizeCountryId(value, 0)
+                  )
+                  : provider === PHONE_SMS_PROVIDER_HOSTED_SMS
                   ? 'US'
                   : String(normalizeCountryId(value, 0))
               )
@@ -5778,8 +5949,51 @@
         phoneSmsProvider: normalizePhoneSmsProvider(providerName),
       });
       const canUseSavedActivationForCurrentFlow = !isPhoneSignupIdentityState(state);
+      const canContinueSmsBowerActivation = (candidateActivation, optionsForCandidate = {}) => {
+        const normalizedCandidate = normalizeActivation(candidateActivation);
+        if (!canUseSavedActivationForCurrentFlow || !normalizedCandidate) {
+          return null;
+        }
+        if (provider !== PHONE_SMS_PROVIDER_SMSBOWER || normalizedCandidate.provider !== PHONE_SMS_PROVIDER_SMSBOWER) {
+          return null;
+        }
+        if (optionsForCandidate.skip) {
+          return null;
+        }
+        if (normalizedCandidate.successfulUses >= normalizedCandidate.maxUses) {
+          return null;
+        }
+        if (getSmsBowerActivationDialMismatch(normalizedCandidate)) {
+          return null;
+        }
+        const countryKey = normalizeCountryKey(normalizedCandidate.countryId);
+        if (blockedCountryIds.has(countryKey) || !allowedCountryIds.has(countryKey)) {
+          return null;
+        }
+        return normalizedCandidate;
+      };
+      const currentActivation = canContinueSmsBowerActivation(state[PHONE_ACTIVATION_STATE_KEY]);
+      if (currentActivation) {
+        await addLog(
+          `步骤 9：继续使用当前 SMSBower 号码 ${currentActivation.phoneNumber}${currentActivation.countryId ? `（${resolveCountryLabelById(currentActivation.countryId)}）` : ''}，不重新获取号码。`,
+          'info'
+        );
+        await resetPhoneNoSupplyFailureStreak(state);
+        return currentActivation;
+      }
       const preferredActivation = normalizeActivation(state[PREFERRED_PHONE_ACTIVATION_STATE_KEY]);
       let failedPreferredActivation = null;
+      const continuablePreferredSmsBowerActivation = canContinueSmsBowerActivation(preferredActivation, {
+        skip: Boolean(options?.skipPreferredActivation),
+      });
+      if (continuablePreferredSmsBowerActivation) {
+        await addLog(
+          `步骤 9：继续使用优先 SMSBower 号码 ${continuablePreferredSmsBowerActivation.phoneNumber}${continuablePreferredSmsBowerActivation.countryId ? `（${resolveCountryLabelById(continuablePreferredSmsBowerActivation.countryId)}）` : ''}，不重新获取号码。`,
+          'info'
+        );
+        await resetPhoneNoSupplyFailureStreak(state);
+        return continuablePreferredSmsBowerActivation;
+      }
       const canTryPreferredActivation = (
         canUseSavedActivationForCurrentFlow
         && !Boolean(options?.skipPreferredActivation)
@@ -5912,7 +6126,7 @@
           const providerLabel = getPhoneSmsProviderLabel(providerCandidate);
           if (
             providerCandidate !== provider
-            && /(?:step|步骤)\s*9\s*[:：]\s*(?:5sim|nexsms).*(?:countries\s+are\s+empty|未选择国家)/i.test(providerErrorMessage)
+            && /(?:step|步骤)\s*9\s*[:：]\s*(?:5sim|nexsms|smsbower).*(?:countries\s+are\s+empty|未选择国家)/i.test(providerErrorMessage)
           ) {
             skippedFallbackProviders.push(`${providerLabel}：未选择国家`);
             await addLog(
@@ -5940,6 +6154,9 @@
       return withPhoneVerificationLogContext({ step: 2, stepKey: 'submit-signup-email' }, async () => {
         if (normalizePhoneSmsProvider(state?.phoneSmsProvider) === PHONE_SMS_PROVIDER_HOSTED_SMS) {
           throw new Error('托管短信接口只支持 Auth/OAuth 后置手机号验证，不支持手机号注册取号。');
+        }
+        if (normalizePhoneSmsProvider(state?.phoneSmsProvider) === PHONE_SMS_PROVIDER_SMSBOWER) {
+          throw new Error('SMSBower 只支持 Auth/OAuth 后置手机号验证，不支持手机号注册取号。');
         }
         const activation = await acquirePhoneActivation(state, {
           ...options,
@@ -6195,7 +6412,11 @@
         : (
           normalizedActivation.provider === PHONE_SMS_PROVIDER_NEXSMS
             ? 'NexSMS'
-            : (normalizedActivation.provider === PHONE_SMS_PROVIDER_HOSTED_SMS ? '托管短信接口' : 'HeroSMS')
+            : (
+              normalizedActivation.provider === PHONE_SMS_PROVIDER_SMSBOWER
+                ? 'SMSBower'
+                : (normalizedActivation.provider === PHONE_SMS_PROVIDER_HOSTED_SMS ? '托管短信接口' : 'HeroSMS')
+            )
         );
       const usePageResend = normalizedActivation.provider !== PHONE_SMS_PROVIDER_5SIM;
 
@@ -7021,6 +7242,13 @@
           const normalizedCountryId = normalizeNexSmsCountryId(countryId, -1);
           return normalizedCountryId >= 0 ? `${normalizedProvider}:${normalizedCountryId}` : '';
         }
+        if (normalizedProvider === PHONE_SMS_PROVIDER_SMSBOWER) {
+          const rootScope = typeof self !== 'undefined' ? self : globalThis;
+          const normalizedCountryId = rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId
+            ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(countryId, 0)
+            : normalizeCountryId(countryId, 0);
+          return normalizedCountryId > 0 ? `${normalizedProvider}:${normalizedCountryId}` : '';
+        }
         if (normalizedProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
           return `${normalizedProvider}:US`;
         }
@@ -7062,6 +7290,15 @@
           const normalizedCountryId = normalizeNexSmsCountryId(normalizedCountryKey, -1);
           const matched = resolveNexSmsCountryCandidates(state)
             .find((entry) => normalizeNexSmsCountryId(entry.id, -1) === normalizedCountryId);
+          return matched?.label || `Country #${normalizedCountryId}`;
+        }
+        if (normalizedProvider === PHONE_SMS_PROVIDER_SMSBOWER) {
+          const rootScope = typeof self !== 'undefined' ? self : globalThis;
+          const normalizedCountryId = rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId
+            ? rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(normalizedCountryKey, 0)
+            : normalizeCountryId(normalizedCountryKey, 0);
+          const matched = resolveCountryCandidatesForProvider(state, PHONE_SMS_PROVIDER_SMSBOWER)
+            .find((entry) => Number(entry.id) === Number(normalizedCountryId));
           return matched?.label || `Country #${normalizedCountryId}`;
         }
         if (normalizedProvider === PHONE_SMS_PROVIDER_HOSTED_SMS) {
@@ -7296,8 +7533,55 @@
         );
       };
 
+      const discardSmsBowerActivationWithDialMismatch = async () => {
+        const normalizedActivation = normalizeActivation(activation);
+        const dialMismatch = getSmsBowerActivationDialMismatch(normalizedActivation);
+        if (!normalizedActivation || !dialMismatch) {
+          return false;
+        }
+
+        const countryLabel = dialMismatch.countryLabel || resolveCountryLabelByFailureKey(
+          normalizeCountryFailureKey(normalizedActivation.countryId, normalizedActivation.provider),
+          normalizedActivation.provider
+        );
+        await addLog(
+          `步骤 9：SMSBower 号码 ${normalizedActivation.rawPhoneNumber || normalizedActivation.phoneNumber} 的实际区号 +${dialMismatch.actualPrefix} 与 ${countryLabel} 的区号 +${dialMismatch.expectedPrefix} 不匹配，已取消该订单并切换下一个号码。`,
+          'warn'
+        );
+        await cancelPhoneActivation(state, normalizedActivation);
+        await markCountrySmsFailure(
+          normalizedActivation.countryId,
+          'country_dial_mismatch',
+          normalizedActivation.provider
+        );
+
+        const latestState = await getState().catch(() => state);
+        const updates = {
+          [PHONE_ACTIVATION_STATE_KEY]: null,
+          [PHONE_VERIFICATION_CODE_STATE_KEY]: '',
+        };
+        if (isSameActivation(latestState?.[PREFERRED_PHONE_ACTIVATION_STATE_KEY], normalizedActivation)) {
+          updates[PREFERRED_PHONE_ACTIVATION_STATE_KEY] = null;
+          preferredActivationExhausted = true;
+        }
+        await setPhoneRuntimeState(updates);
+
+        activation = null;
+        shouldCancelActivation = false;
+        preferReuseExistingActivationOnAddPhone = false;
+        addPhoneReentryWithSameActivation = 0;
+        pageState = {
+          ...pageState,
+          addPhonePage: true,
+          phoneVerificationPage: false,
+        };
+        return true;
+      };
+
       const rotateActivationAfterAddPhoneFailure = async (failureReason, failureCode, submitState = {}) => {
         await markPreferredActivationExhausted(failureCode || failureReason);
+        const virtualPhoneRejected = isPhoneNumberVirtualPhoneError(failureReason);
+        const countrySelectionMismatch = /failed\s+to\s+select\b.*add-phone\s+page|country\s+dial\s+code\s+mismatch/i.test(String(failureReason || ''));
         usedNumberReplacementAttempts += 1;
         if (usedNumberReplacementAttempts > maxNumberReplacementAttempts) {
           throw buildPhoneReplacementLimitError(maxNumberReplacementAttempts, failureCode || 'add_phone_rejected');
@@ -7306,8 +7590,26 @@
           `步骤 9：添加手机号失败后正在更换号码（${formatStep9Reason(failureReason)}，${usedNumberReplacementAttempts}/${maxNumberReplacementAttempts}）。`,
           'warn'
         );
+        if (virtualPhoneRejected && activation) {
+          await discardPhoneActivationFromReuse(
+            `目标站拒绝虚拟号/VoIP 号码（${failureReason}）。`,
+            activation,
+            await getState()
+          );
+        }
+        if (countrySelectionMismatch && activation) {
+          await markCountrySmsFailure(
+            activation.countryId,
+            failureCode || 'country_selection_mismatch',
+            activation.provider
+          );
+        }
         if (shouldCancelActivation && activation) {
-          await cancelPhoneActivation(state, activation);
+          if (virtualPhoneRejected) {
+            await banPhoneActivation(state, activation);
+          } else {
+            await cancelPhoneActivation(state, activation);
+          }
         }
         await clearCurrentActivation();
         activation = null;
@@ -7419,15 +7721,25 @@
               );
             }
 
+            if (await discardSmsBowerActivationWithDialMismatch()) {
+              continue;
+            }
+
             let submitResult = null;
             try {
               submitResult = await submitPhoneNumber(tabId, activation.phoneNumber, activation);
             } catch (submitError) {
               const submitErrorText = String(submitError?.message || submitError || 'unknown error');
-              if (isPhoneNumberDeliveryRefusedError(submitErrorText) || isRecoverableAddPhoneSubmitError(submitErrorText)) {
+              if (
+                isPhoneNumberDeliveryRefusedError(submitErrorText)
+                || isPhoneNumberVirtualPhoneError(submitErrorText)
+                || isRecoverableAddPhoneSubmitError(submitErrorText)
+              ) {
                 await rotateActivationAfterAddPhoneFailure(
                   submitErrorText,
-                  isPhoneNumberDeliveryRefusedError(submitErrorText) ? 'phone_delivery_refused' : 'add_phone_submit_failed',
+                  isPhoneNumberDeliveryRefusedError(submitErrorText)
+                    ? 'phone_delivery_refused'
+                    : (isPhoneNumberVirtualPhoneError(submitErrorText) ? 'phone_virtual_number' : 'add_phone_submit_failed'),
                   { url: pageState?.url || '' }
                 );
                 continue;
@@ -7482,6 +7794,14 @@
                 );
                 continue;
               }
+              if (isPhoneNumberVirtualPhoneError(addPhoneRejectText)) {
+                await rotateActivationAfterAddPhoneFailure(
+                  addPhoneRejectText,
+                  'phone_virtual_number',
+                  submitResult || {}
+                );
+                continue;
+              }
 
               await addLog(
                 `步骤 9：添加手机号页面拒绝当前号码，但未明确提示已使用（${addPhoneRejectText}），将用同一号码再试一次。`,
@@ -7503,13 +7823,18 @@
                 if (
                   isPhoneNumberUsedError(retryRejectText)
                   || isPhoneNumberDeliveryRefusedError(retryRejectText)
+                  || isPhoneNumberVirtualPhoneError(retryRejectText)
                   || isRecoverableAddPhoneSubmitError(retryRejectText)
                 ) {
                   await rotateActivationAfterAddPhoneFailure(
                     `add-phone keeps rejecting ${activation.phoneNumber} (${retryRejectText})`,
                     isPhoneNumberUsedError(retryRejectText)
                       ? 'phone_number_used'
-                      : (isPhoneNumberDeliveryRefusedError(retryRejectText) ? 'phone_delivery_refused' : 'add_phone_rejected'),
+                      : (
+                        isPhoneNumberDeliveryRefusedError(retryRejectText)
+                          ? 'phone_delivery_refused'
+                          : (isPhoneNumberVirtualPhoneError(retryRejectText) ? 'phone_virtual_number' : 'add_phone_rejected')
+                      ),
                     submitResult || {}
                   );
                   continue;

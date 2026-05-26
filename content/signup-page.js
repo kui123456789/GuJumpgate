@@ -1435,6 +1435,14 @@ function getSignupCountryLabelAliases(value) {
 
   const raw = String(value || '').trim();
   addAlias(raw);
+  Array.from(raw.matchAll(/\(([^()]+)\)/g))
+    .map((match) => match[1])
+    .forEach(addAlias);
+  const withoutParentheses = raw.replace(/\([^()]*\)/g, ' ');
+  const withoutDialCodes = withoutParentheses
+    .replace(/\+\s*\d{1,4}\b/g, ' ')
+    .replace(/\(\s*\+\s*\d{1,4}\s*\)/g, ' ');
+  addAlias(withoutDialCodes);
 
   const normalized = normalizeSignupCountryLabel(raw);
   const compact = normalized.replace(/\s+/g, '');
@@ -1458,6 +1466,22 @@ function getSignupCountryLabelAliases(value) {
   }
 
   return Array.from(aliases);
+}
+
+function isLooseSignupCountryLabelMatch(optionLabel, targetLabel) {
+  const phoneCountryUtils = (typeof self !== 'undefined' ? self : globalThis)?.MultiPagePhoneCountryUtils
+    || globalThis?.MultiPagePhoneCountryUtils
+    || {};
+  if (typeof phoneCountryUtils.isLooseCountryLabelMatch === 'function') {
+    return phoneCountryUtils.isLooseCountryLabelMatch(optionLabel, targetLabel);
+  }
+  if (!optionLabel || !targetLabel || optionLabel.length <= 2 || targetLabel.length <= 2) {
+    return false;
+  }
+  if (optionLabel.includes(targetLabel)) {
+    return true;
+  }
+  return /\s/.test(optionLabel) && targetLabel.includes(optionLabel);
 }
 
 function getSignupPhoneOptionLabel(option) {
@@ -1732,16 +1756,20 @@ function resolveSignupPhoneDialCodeFromNumber(phoneNumber = '', texts = []) {
 }
 
 function resolveSignupPhoneTargetDialCode(options = {}, targetOption = null) {
-  const optionDialCode = extractDialCodeFromText(getSignupPhoneOptionLabel(targetOption));
-  if (optionDialCode) {
-    return optionDialCode;
-  }
-
   const countryText = String(options.countryLabel || '').trim();
   if (/australia|澳大利亚/i.test(countryText)) return '61';
   if (/thailand|泰国/i.test(countryText)) return '66';
   if (/vietnam|越南/i.test(countryText)) return '84';
   if (/england|united\s*kingdom|great\s*britain|\bbritain\b|英国|英格兰|uk|gb/i.test(countryText)) return '44';
+  const countryDialCode = extractDialCodeFromText(countryText);
+  if (countryDialCode) {
+    return countryDialCode;
+  }
+
+  const optionDialCode = extractDialCodeFromText(getSignupPhoneOptionLabel(targetOption));
+  if (optionDialCode) {
+    return optionDialCode;
+  }
 
   return resolveSignupPhoneDialCodeFromNumber(options.phoneNumber);
 }
@@ -1771,8 +1799,7 @@ function doesSignupPhoneCountryTextMatchTarget(text, targetOption, options = {})
     label
     && (
       normalizedText === label
-      || (label.length > 1 && normalizedText.includes(label))
-      || (normalizedText.length > 2 && label.includes(normalizedText))
+      || isLooseSignupCountryLabelMatch(normalizedText, label)
     )
   ))) {
     return true;
@@ -1833,9 +1860,7 @@ function findSignupPhoneCountryOptionByLabel(phoneInput, countryLabel) {
         .map((label) => normalizeSignupCountryLabel(label))
         .filter(Boolean);
       return normalizedLabels.some((optionLabel) => normalizedTargets.some((normalizedTarget) => (
-          optionLabel.length > 2
-          && normalizedTarget.length > 2
-          && (optionLabel.includes(normalizedTarget) || normalizedTarget.includes(optionLabel))
+          isLooseSignupCountryLabelMatch(optionLabel, normalizedTarget)
         )));
     })
     || null;
@@ -2089,7 +2114,12 @@ async function ensureSignupPhoneCountrySelected(phoneInput, options = {}) {
   }
 
   const byLabel = findSignupPhoneCountryOptionByLabel(phoneInput, options.countryLabel);
-  const byPhoneNumber = findSignupPhoneCountryOptionByPhoneNumber(phoneInput, options.phoneNumber);
+  const countryDialCode = extractDialCodeFromText(String(options.countryLabel || '').trim());
+  const byPhoneNumberCandidate = findSignupPhoneCountryOptionByPhoneNumber(phoneInput, options.phoneNumber);
+  const byPhoneNumberDialCode = extractDialCodeFromText(getSignupPhoneOptionLabel(byPhoneNumberCandidate));
+  const byPhoneNumber = countryDialCode && byPhoneNumberDialCode && byPhoneNumberDialCode !== countryDialCode
+    ? null
+    : byPhoneNumberCandidate;
   const targets = [byLabel, byPhoneNumber, null].filter((target, index, list) => (
     index === list.findIndex((item) => (
       (!item && !target)
@@ -4207,9 +4237,7 @@ function findLoginPhoneCountryOptionByLabel(select, countryLabel) {
       .map((label) => normalizeCountryLabel(label))
       .filter(Boolean);
     return normalizedLabels.some((optionLabel) => (
-      optionLabel.length > 2
-      && normalizedTarget.length > 2
-      && (optionLabel.includes(normalizedTarget) || normalizedTarget.includes(optionLabel))
+      isLooseSignupCountryLabelMatch(optionLabel, normalizedTarget)
     ));
   }) || null;
 }
