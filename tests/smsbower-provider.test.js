@@ -88,6 +88,29 @@ test('smsbower requestActivation uses getNumber with service country and price b
   assert.equal(activation.rawPhoneNumber, '12092905100');
 });
 
+test('smsbower coerces generic service aliases to OpenAI service', async () => {
+  for (const serviceCode of ['ot', 'any']) {
+    const requestedUrls = [];
+    const provider = smsBower.createProvider({
+      fetchImpl: async (url) => {
+        requestedUrls.push(new URL(url));
+        return {
+          ok: true,
+          text: async () => `ACCESS_NUMBER:${serviceCode}:12092905100`,
+        };
+      },
+    });
+
+    await provider.requestActivation({
+      smsBowerApiKey: 'key-1',
+      smsBowerCountryOrder: [187],
+      smsBowerServiceCode: serviceCode,
+    });
+
+    assert.equal(requestedUrls[0].searchParams.get('service'), 'dr');
+  }
+});
+
 test('smsbower skips and cancels numbers whose returned dial code does not match the requested country', async () => {
   const requestedCountries = [];
   const cancelledIds = [];

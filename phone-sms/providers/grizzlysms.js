@@ -9,12 +9,24 @@
   const DEFAULT_COUNTRY_ID = 52;
   const DEFAULT_COUNTRY_LABEL = 'Thailand';
 
+  function normalizeServiceCode(value = '', fallback = DEFAULT_SERVICE_CODE) {
+    if (typeof root?.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode === 'function') {
+      return root.PhoneSmsBowerProvider.normalizeSmsBowerServiceCode(value, fallback);
+    }
+    const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+    if (normalized && normalized !== 'ot' && normalized !== 'any') return normalized;
+    const fallbackNormalized = String(fallback || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+    return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+      ? fallbackNormalized
+      : DEFAULT_SERVICE_CODE;
+  }
+
   function translateState(state = {}) {
     return {
       ...state,
       smsBowerApiKey: state.grizzlySmsApiKey ?? state.smsBowerApiKey ?? '',
       smsBowerBaseUrl: state.grizzlySmsBaseUrl ?? state.smsBowerBaseUrl ?? DEFAULT_BASE_URL,
-      smsBowerServiceCode: state.grizzlySmsServiceCode ?? state.smsBowerServiceCode ?? DEFAULT_SERVICE_CODE,
+      smsBowerServiceCode: normalizeServiceCode(state.grizzlySmsServiceCode, DEFAULT_SERVICE_CODE),
       smsBowerCountryId: state.grizzlySmsCountryId ?? state.smsBowerCountryId ?? DEFAULT_COUNTRY_ID,
       smsBowerCountryLabel: state.grizzlySmsCountryLabel ?? state.smsBowerCountryLabel ?? DEFAULT_COUNTRY_LABEL,
       smsBowerCountryFallback: state.grizzlySmsCountryFallback ?? state.smsBowerCountryFallback ?? [],

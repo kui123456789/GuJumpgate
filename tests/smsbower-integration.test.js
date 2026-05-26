@@ -31,6 +31,15 @@ test('phone verification flow wires SMSBower into Step9 provider lifecycle', () 
   assert.match(phoneVerificationFlowJs, /provider\.banActivation\(state,\s*activation\)/);
 });
 
+test('background fallback SMSBower service normalizer coerces generic aliases to OpenAI', () => {
+  const match = backgroundJs.match(/function\s+normalizeSmsBowerServiceCode\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(match, 'missing background normalizeSmsBowerServiceCode');
+  const source = match[0];
+  assert.match(source, /normalized\s*&&\s*normalized\s*!==\s*'ot'\s*&&\s*normalized\s*!==\s*'any'/);
+  assert.match(source, /fallbackNormalized\s*&&\s*fallbackNormalized\s*!==\s*'ot'\s*&&\s*fallbackNormalized\s*!==\s*'any'/);
+  assert.match(source, /DEFAULT_SMS_BOWER_SERVICE_CODE/);
+});
+
 test('sidepanel exposes SMSBower provider controls and countries', () => {
   assert.match(sidepanelHtml, /<option\s+value="smsbower">SMSBower<\/option>/);
   assert.match(sidepanelHtml, /id="row-sms-bower-api-key"/);
@@ -44,6 +53,20 @@ test('sidepanel exposes SMSBower provider controls and countries', () => {
   assert.match(sidepanelHtml, /加纳 \+233 \(Ghana\)/);
   assert.match(sidepanelHtml, /id="row-sms-bower-service-code"/);
   assert.match(sidepanelHtml, /id="input-sms-bower-service-code"/);
+});
+
+test('sidepanel lists SMSBower only once in provider selectors', () => {
+  const extractSelect = (id) => {
+    const match = sidepanelHtml.match(new RegExp(`<select[^>]+id="${id}"[\\s\\S]*?<\\/select>`));
+    assert.ok(match, `missing select #${id}`);
+    return match[0];
+  };
+  const countSmsBowerOptions = (html) => (
+    html.match(/<option\s+value="smsbower"[^>]*>SMSBower<\/option>/g) || []
+  ).length;
+
+  assert.equal(countSmsBowerOptions(extractSelect('select-phone-sms-provider')), 1);
+  assert.equal(countSmsBowerOptions(extractSelect('select-phone-sms-provider-order')), 1);
 });
 
 test('sidepanel persists SMSBower settings separately from other providers', () => {

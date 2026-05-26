@@ -14,7 +14,7 @@ test('hosted-sms parses phone-url pool entries and removes cache timestamp', () 
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].phone, '2092905100');
-  assert.equal(entries[0].countryLabel, 'United States');
+  assert.equal(entries[0].countryLabel, 'United States (+1)');
   assert.equal(entries[0].verificationUrl, 'https://example.test/api/sms/recordText?key=replace-me');
   assert.equal(entries[0].key, '2092905100----https://example.test/api/sms/recordText?key=replace-me');
 });
@@ -48,10 +48,70 @@ test('hosted-sms normalizes US local phone and activation country', async () => 
   assert.equal(activation.provider, 'hosted-sms');
   assert.equal(activation.phoneNumber, '2092905100');
   assert.equal(activation.countryId, 'US');
-  assert.equal(activation.countryLabel, 'United States');
+  assert.equal(activation.countryLabel, 'United States (+1)');
   assert.equal(activation.verificationUrl, 'https://example.test/api/sms/recordText?key=replace-me');
   assert.equal(usagePatches.length, 1);
   assert.equal(usagePatches[0].hostedSmsCurrentEntry.key, activation.activationId);
+});
+
+test('hosted-sms sends US dial code for local numbers that look like international prefixes', async () => {
+  require('../background/phone-verification-flow.js');
+
+  const submittedPayloads = [];
+  const state = {
+    phoneSmsProvider: 'hosted-sms',
+    hostedSmsPoolText: '3802318796----https://example.test/api/sms/recordText?key=replace-me',
+    hostedSmsPoolUsage: {},
+    phoneCodeWaitSeconds: 15,
+    phoneCodeTimeoutWindows: 1,
+    phoneCodePollIntervalSeconds: 1,
+    phoneCodePollMaxRounds: 1,
+  };
+
+  const helpers = globalThis.MultiPageBackgroundPhoneVerification.createPhoneVerificationHelpers({
+    addLog: async () => {},
+    ensureStep8SignupPageReady: async () => {},
+    getState: async () => state,
+    setState: async (updates) => Object.assign(state, updates || {}),
+    sleepWithStop: async () => {},
+    throwIfStopped: () => {},
+    fetchImpl: async () => ({
+      ok: true,
+      text: async () => 'Your verification code is 123456.',
+    }),
+    sendToContentScriptResilient: async (_target, message) => {
+      if (message.type === 'SUBMIT_PHONE_NUMBER') {
+        submittedPayloads.push(message.payload);
+        return {
+          addPhonePage: false,
+          phoneVerificationPage: true,
+        };
+      }
+      if (message.type === 'SUBMIT_PHONE_VERIFICATION_CODE') {
+        return {
+          ok: true,
+          url: 'https://chatgpt.com/',
+        };
+      }
+      if (message.type === 'STEP8_GET_STATE') {
+        return {
+          addPhonePage: false,
+          phoneVerificationPage: true,
+        };
+      }
+      return {};
+    },
+  });
+
+  await helpers.completePhoneVerificationFlow(1, {
+    addPhonePage: true,
+    phoneVerificationPage: false,
+    url: 'https://auth.openai.com/add-phone',
+  });
+
+  assert.equal(submittedPayloads.length, 1);
+  assert.equal(submittedPayloads[0].phoneNumber, '3802318796');
+  assert.match(submittedPayloads[0].countryLabel, /\+1/);
 });
 
 test('hosted-sms extracts verification codes from text and nested JSON fields', () => {

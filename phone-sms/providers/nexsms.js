@@ -4,7 +4,7 @@
   const PROVIDER_ID = 'nexsms';
   const PROVIDER_LABEL = 'NexSMS';
   const DEFAULT_BASE_URL = 'https://api.nexsms.net';
-  const DEFAULT_SERVICE_CODE = 'ot';
+  const DEFAULT_SERVICE_CODE = 'dr';
   const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
   const DEFAULT_ACTIVATION_RETRY_ROUNDS = 3;
   const DEFAULT_ACTIVATION_RETRY_DELAY_MS = 2000;
@@ -66,14 +66,16 @@
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, '');
-    if (normalized) {
+    if (normalized && normalized !== 'ot' && normalized !== 'any') {
       return normalized;
     }
     const fallbackNormalized = String(fallback || '')
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, '');
-    return fallbackNormalized || DEFAULT_SERVICE_CODE;
+    return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+      ? fallbackNormalized
+      : DEFAULT_SERVICE_CODE;
   }
 
   function normalizeBaseUrl(value = '') {

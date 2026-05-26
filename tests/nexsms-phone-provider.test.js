@@ -40,7 +40,7 @@ test('NexSMS provider requests activation through unified module path', async ()
         assert.equal(init.method, 'POST');
         const body = JSON.parse(init.body);
         assert.equal(body.countryId, 1);
-        assert.equal(body.serviceCode, 'ot');
+        assert.equal(body.serviceCode, 'dr');
         assert.equal(body.price, 0.2);
         return {
           ok: true,
@@ -50,7 +50,7 @@ test('NexSMS provider requests activation through unified module path', async ()
               phoneNumber: '17198279624',
               countryId: 1,
               countryName: 'Testland',
-              serviceCode: 'ot',
+              serviceCode: 'dr',
             },
           }),
         };
@@ -71,6 +71,54 @@ test('NexSMS provider requests activation through unified module path', async ()
   assert.equal(activation.countryId, 1);
   assert.equal(activation.countryLabel, 'Testland');
   assert.equal(requests.length, 2);
+});
+
+test('NexSMS provider coerces generic service aliases to OpenAI service', async () => {
+  for (const serviceCode of ['ot', 'any']) {
+    const requestedBodies = [];
+    const provider = createProvider({
+      fetchImpl: async (url, init = {}) => {
+        if (String(url).includes('/api/getCountryByService')) {
+          return {
+            ok: true,
+            text: async () => JSON.stringify({
+              code: 0,
+              data: {
+                countryId: 1,
+                countryName: 'Testland',
+                minPrice: 0.2,
+                priceMap: { '0.2': 1 },
+              },
+            }),
+          };
+        }
+        if (String(url).includes('/api/order/purchase')) {
+          requestedBodies.push(JSON.parse(init.body));
+          return {
+            ok: true,
+            text: async () => JSON.stringify({
+              code: 0,
+              data: {
+                phoneNumber: '17198279624',
+                countryId: 1,
+                countryName: 'Testland',
+                serviceCode: 'dr',
+              },
+            }),
+          };
+        }
+        throw new Error(`unexpected url: ${url}`);
+      },
+    });
+
+    await provider.requestActivation({
+      nexSmsApiKey: 'demo-key',
+      nexSmsCountryOrder: [1],
+      nexSmsServiceCode: serviceCode,
+    });
+
+    assert.equal(requestedBodies[0].serviceCode, 'dr');
+  }
 });
 
 test('NexSMS provider polls latest sms message for code', async () => {

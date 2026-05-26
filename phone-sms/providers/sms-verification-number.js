@@ -11,12 +11,24 @@
   const DEFAULT_LANG = 'en';
   const DEFAULT_PRICES_ACTION = 'getPrices';
 
+  function normalizeServiceCode(value = '', fallback = DEFAULT_SERVICE_CODE) {
+    if (typeof root?.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode === 'function') {
+      return root.PhoneSmsBowerProvider.normalizeSmsBowerServiceCode(value, fallback);
+    }
+    const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+    if (normalized && normalized !== 'ot' && normalized !== 'any') return normalized;
+    const fallbackNormalized = String(fallback || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+    return fallbackNormalized && fallbackNormalized !== 'ot' && fallbackNormalized !== 'any'
+      ? fallbackNormalized
+      : DEFAULT_SERVICE_CODE;
+  }
+
   function translateState(state = {}) {
     return {
       ...state,
       smsBowerApiKey: state.smsVerificationNumberApiKey ?? state.smsBowerApiKey ?? '',
       smsBowerBaseUrl: state.smsVerificationNumberBaseUrl ?? state.smsBowerBaseUrl ?? DEFAULT_BASE_URL,
-      smsBowerServiceCode: state.smsVerificationNumberServiceCode ?? state.smsBowerServiceCode ?? DEFAULT_SERVICE_CODE,
+      smsBowerServiceCode: normalizeServiceCode(state.smsVerificationNumberServiceCode, DEFAULT_SERVICE_CODE),
       smsBowerCountryId: state.smsVerificationNumberCountryId ?? state.smsBowerCountryId ?? DEFAULT_COUNTRY_ID,
       smsBowerCountryLabel: state.smsVerificationNumberCountryLabel ?? state.smsBowerCountryLabel ?? DEFAULT_COUNTRY_LABEL,
       smsBowerCountryFallback: state.smsVerificationNumberCountryFallback ?? state.smsBowerCountryFallback ?? [],
