@@ -7,7 +7,7 @@
   const DEFAULT_SERVICE_CODE = 'dr';
   const DEFAULT_SERVICE_LABEL = 'OpenAI';
   const DEFAULT_COUNTRY_ID = 52;
-  const DEFAULT_COUNTRY_LABEL = 'Thailand';
+  const DEFAULT_COUNTRY_LABEL = '泰国 +66 (Thailand)';
 
   function normalizeServiceCode(value = '', fallback = DEFAULT_SERVICE_CODE) {
     if (typeof root?.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode === 'function') {

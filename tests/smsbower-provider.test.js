@@ -3,19 +3,31 @@ const test = require('node:test');
 
 const smsBower = require('../phone-sms/providers/smsbower.js');
 
-test('smsbower exposes OpenAI service and supported countries including Nigeria Ghana and US', () => {
+test('smsbower exposes OpenAI service and supported countries including requested presets', () => {
   assert.equal(smsBower.DEFAULT_SERVICE_CODE, 'dr');
-  assert.equal(smsBower.DEFAULT_COUNTRY_ORDER[0], 12);
+  assert.equal(smsBower.DEFAULT_COUNTRY_ORDER[0], 52);
   assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(19));
   assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(38));
   assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(12));
   assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(187));
+  assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(55));
+  assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(204));
+  assert.ok(smsBower.DEFAULT_COUNTRY_ORDER.includes(91));
 
   const countriesById = new Map(smsBower.SUPPORTED_COUNTRY_ITEMS.map((entry) => [entry.id, entry]));
+  assert.equal(countriesById.get(52).label, '泰国 +66 (Thailand)');
+  assert.equal(countriesById.get(52).phonePrefix, '66');
+  assert.equal(countriesById.get(55).label, '台湾 +886 (Taiwan)');
+  assert.equal(countriesById.get(55).phonePrefix, '886');
   assert.equal(countriesById.get(12).label, '美国 +1 (United States)');
   assert.equal(countriesById.get(12).phonePrefix, '1');
   assert.equal(countriesById.get(187).label, '美国虚拟 +1 (United States Virtual)');
   assert.equal(countriesById.get(187).phonePrefix, '1');
+  assert.equal(countriesById.get(182).label, '日本 +81 (Japan)');
+  assert.equal(countriesById.get(204).label, '纽埃 +683 (Niue)');
+  assert.equal(countriesById.get(36).label, '加拿大 +1 (Canada)');
+  assert.equal(countriesById.get(78).label, '法国 +33 (France)');
+  assert.equal(countriesById.get(91).label, '东帝汶 +670 (Timor-Leste)');
   assert.equal(countriesById.get(19).label, '尼日利亚 +234 (Nigeria)');
   assert.equal(countriesById.get(19).phonePrefix, '234');
   assert.equal(countriesById.get(7).label, '马来西亚 +60 (Malaysia)');

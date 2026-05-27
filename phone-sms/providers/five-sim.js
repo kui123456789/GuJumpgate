@@ -6,8 +6,8 @@
   const DEFAULT_BASE_URL = 'https://5sim.net';
   const DEFAULT_PRODUCT = 'openai';
   const DEFAULT_OPERATOR = 'any';
-  const DEFAULT_COUNTRY_ID = 'vietnam';
-  const DEFAULT_COUNTRY_LABEL = '越南 (Vietnam)';
+  const DEFAULT_COUNTRY_ID = 'thailand';
+  const DEFAULT_COUNTRY_LABEL = '泰国 (Thailand)';
   const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
   const DEFAULT_MAX_USES = 3;
   const FIVE_SIM_RATE_LIMIT_ERROR_PREFIX = 'FIVE_SIM_RATE_LIMIT::';
@@ -15,9 +15,13 @@
   const SUPPORTED_COUNTRY_ITEMS = Object.freeze([
     { id: 'indonesia', label: '印度尼西亚 (Indonesia)' },
     { id: 'thailand', label: '泰国 (Thailand)' },
+    { id: 'taiwan', label: '台湾 (Taiwan)' },
     { id: 'england', label: '英国 (England)' },
     { id: 'usa', label: '美国 (United States)' },
     { id: 'japan', label: '日本 (Japan)' },
+    { id: 'canada', label: '加拿大 (Canada)' },
+    { id: 'france', label: '法国 (France)' },
+    { id: 'easttimor', label: '东帝汶 (East Timor)' },
     { id: 'germany', label: '德国 (Germany)' },
     { id: 'vietnam', label: '越南 (Vietnam)' },
   ]);
@@ -55,6 +59,8 @@
     england: '英国',
     estonia: '爱沙尼亚',
     ethiopia: '埃塞俄比亚',
+    easttimor: '东帝汶',
+    falklandislands: '福克兰群岛',
     finland: '芬兰',
     france: '法国',
     georgia: '格鲁吉亚',
@@ -84,6 +90,7 @@
     nepal: '尼泊尔',
     netherlands: '荷兰',
     newzealand: '新西兰',
+    niue: '纽埃',
     nigeria: '尼日利亚',
     norway: '挪威',
     pakistan: '巴基斯坦',
@@ -95,11 +102,13 @@
     romania: '罗马尼亚',
     russia: '俄罗斯',
     saudiarabia: '沙特阿拉伯',
+    sanmarino: '圣马力诺',
     serbia: '塞尔维亚',
     singapore: '新加坡',
     slovakia: '斯洛伐克',
     slovenia: '斯洛文尼亚',
     southafrica: '南非',
+    southkorea: '韩国',
     spain: '西班牙',
     srilanka: '斯里兰卡',
     sweden: '瑞典',
@@ -113,6 +122,7 @@
     uruguay: '乌拉圭',
     usa: '美国',
     uzbekistan: '乌兹别克斯坦',
+    vanuatu: '瓦努阿图',
     venezuela: '委内瑞拉',
     vietnam: '越南',
   });
