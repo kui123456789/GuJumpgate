@@ -753,24 +753,38 @@ const DEFAULT_PHONE_SMS_PROVIDER_ORDER = Object.freeze([
   PHONE_SMS_PROVIDER_SMSPOOL,
   PHONE_SMS_PROVIDER_CHATGPT_API,
 ]);
-const DEFAULT_FIVE_SIM_COUNTRY_ORDER = Object.freeze(['thailand']);
+const DEFAULT_FIVE_SIM_COUNTRY_ORDER = Object.freeze([
+  'thailand',
+  'taiwan',
+  'usa',
+  'japan',
+  'canada',
+  'france',
+  'easttimor',
+]);
 const DEFAULT_FIVE_SIM_OPERATOR = 'any';
 const DEFAULT_FIVE_SIM_PRODUCT = 'openai';
-const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([1]);
+const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([52, 55, 187, 182, 204, 36, 78, 91]);
 const DEFAULT_NEX_SMS_SERVICE_CODE = 'dr';
-const DEFAULT_SMS_BOWER_COUNTRY_ORDER = Object.freeze([12, 187, 19, 38, 7, 52]);
+const DEFAULT_SMS_BOWER_COUNTRY_ORDER = Object.freeze([52, 55, 12, 187, 182, 204, 36, 78, 91, 19, 38, 7]);
 const DEFAULT_SMS_BOWER_SERVICE_CODE = 'dr';
 const SMS_BOWER_SUPPORTED_COUNTRY_ITEMS = Object.freeze([
+  { id: 52, label: '泰国 +66 (Thailand)', searchText: '52 TH Thailand 泰国 +66' },
+  { id: 55, label: '台湾 +886 (Taiwan)', searchText: '55 TW Taiwan 台湾 +886' },
   { id: 12, label: '美国 +1 (United States)', searchText: '12 US USA United States 美国 +1 实体' },
   { id: 187, label: '美国虚拟 +1 (United States Virtual)', searchText: '187 US USA United States Virtual 美国虚拟 +1' },
+  { id: 182, label: '日本 +81 (Japan)', searchText: '182 JP Japan 日本 +81' },
+  { id: 204, label: '纽埃 +683 (Niue)', searchText: '204 NU Niue 纽埃 +683' },
+  { id: 36, label: '加拿大 +1 (Canada)', searchText: '36 CA Canada 加拿大 +1' },
+  { id: 78, label: '法国 +33 (France)', searchText: '78 FR France 法国 +33' },
+  { id: 91, label: '东帝汶 +670 (Timor-Leste)', searchText: '91 TL Timor-Leste East Timor 东帝汶 +670' },
   { id: 19, label: '尼日利亚 +234 (Nigeria)', searchText: '19 NG Nigeria 尼日利亚 +234' },
   { id: 7, label: '马来西亚 +60 (Malaysia)', searchText: '7 MY Malaysia 马来西亚 +60' },
   { id: 38, label: '加纳 +233 (Ghana)', searchText: '38 GH Ghana 加纳 +233' },
-  { id: 52, label: '泰国 +66 (Thailand)', searchText: '52 TH Thailand 泰国 +66' },
   { id: 6, label: '印度尼西亚 +62 (Indonesia)', searchText: '6 ID Indonesia 印度尼西亚 +62' },
   { id: 10, label: '越南 +84 (Vietnam)', searchText: '10 VN Vietnam 越南 +84' },
 ]);
-const HERO_SMS_COUNTRY_SELECTION_MAX = 3;
+const HERO_SMS_COUNTRY_SELECTION_MAX = 12;
 const SMS_BOWER_COUNTRY_SELECTION_MAX = Math.max(
   HERO_SMS_COUNTRY_SELECTION_MAX,
   DEFAULT_SMS_BOWER_COUNTRY_ORDER.length
@@ -788,14 +802,18 @@ const HERO_SMS_SUPPORTED_COUNTRY_ITEMS = Object.freeze([
   { id: 16, chn: '英国', eng: 'United Kingdom' },
   { id: 32, chn: '罗马尼亚', eng: 'Romania' },
   { id: 33, chn: '哥伦比亚', eng: 'Colombia' },
+  { id: 36, chn: '加拿大', eng: 'Canada' },
   { id: 43, chn: '德国', eng: 'Germany' },
   { id: 52, chn: '泰国', eng: 'Thailand' },
+  { id: 55, chn: '台湾', eng: 'Taiwan' },
   { id: 73, chn: '巴西', eng: 'Brazil' },
   { id: 78, chn: '法国', eng: 'France' },
+  { id: 91, chn: '东帝汶', eng: 'Timor-Leste' },
   { id: 10, chn: '越南', eng: 'Vietnam' },
   { id: 151, chn: '智利', eng: 'Chile' },
   { id: 182, chn: '日本', eng: 'Japan' },
   { id: 187, chn: '美国（物理)', eng: 'USA' },
+  { id: 204, chn: '纽埃', eng: 'Niue' },
 ]);
 const HERO_SMS_SUPPORTED_COUNTRY_ID_SET = new Set(HERO_SMS_SUPPORTED_COUNTRY_ITEMS.map((item) => String(item.id)));
 const HERO_SMS_FALLBACK_COUNTRY_ITEMS = HERO_SMS_SUPPORTED_COUNTRY_ITEMS;
@@ -832,6 +850,8 @@ const FIVE_SIM_COUNTRY_CN_BY_ID = Object.freeze({
   england: '英国',
   estonia: '爱沙尼亚',
   ethiopia: '埃塞俄比亚',
+  easttimor: '东帝汶',
+  falklandislands: '福克兰群岛',
   finland: '芬兰',
   france: '法国',
   georgia: '格鲁吉亚',
@@ -861,6 +881,7 @@ const FIVE_SIM_COUNTRY_CN_BY_ID = Object.freeze({
   nepal: '尼泊尔',
   netherlands: '荷兰',
   newzealand: '新西兰',
+  niue: '纽埃',
   nigeria: '尼日利亚',
   norway: '挪威',
   pakistan: '巴基斯坦',
@@ -872,11 +893,13 @@ const FIVE_SIM_COUNTRY_CN_BY_ID = Object.freeze({
   romania: '罗马尼亚',
   russia: '俄罗斯',
   saudiarabia: '沙特阿拉伯',
+  sanmarino: '圣马力诺',
   serbia: '塞尔维亚',
   singapore: '新加坡',
   slovakia: '斯洛伐克',
   slovenia: '斯洛文尼亚',
   southafrica: '南非',
+  southkorea: '韩国',
   spain: '西班牙',
   srilanka: '斯里兰卡',
   sweden: '瑞典',
@@ -890,6 +913,7 @@ const FIVE_SIM_COUNTRY_CN_BY_ID = Object.freeze({
   uruguay: '乌拉圭',
   usa: '美国',
   uzbekistan: '乌兹别克斯坦',
+  vanuatu: '瓦努阿图',
   venezuela: '委内瑞拉',
   vietnam: '越南',
 });
@@ -1214,8 +1238,8 @@ const DISPLAY_TIMEZONE = 'Asia/Shanghai';
 const DEFAULT_ACCOUNT_RUN_HISTORY_HELPER_BASE_URL = 'http://127.0.0.1:17373';
 const CONTRIBUTION_UPLOAD_URL = '';
 const DEFAULT_PHONE_VERIFICATION_ENABLED = false;
-const DEFAULT_HERO_SMS_COUNTRY_ID = 33;
-const DEFAULT_HERO_SMS_COUNTRY_LABEL = 'Colombia';
+const DEFAULT_HERO_SMS_COUNTRY_ID = 52;
+const DEFAULT_HERO_SMS_COUNTRY_LABEL = '泰国 (Thailand)';
 const DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL = 'https://sms-verification-number.com/stubs/handler_api';
 const DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE = 'dr';
 const DEFAULT_SMS_VERIFICATION_NUMBER_COUNTRY_ID = DEFAULT_HERO_SMS_COUNTRY_ID;
@@ -1223,23 +1247,42 @@ const DEFAULT_SMS_VERIFICATION_NUMBER_COUNTRY_LABEL = DEFAULT_HERO_SMS_COUNTRY_L
 const DEFAULT_GRIZZLY_SMS_SERVICE_CODE = 'dr';
 const DEFAULT_SMSPOOL_SERVICE_CODE = '671';
 const DEFAULT_SMSPOOL_COUNTRY_ID = 1;
-const DEFAULT_SMSPOOL_COUNTRY_LABEL = 'United States';
-const DEFAULT_FIVE_SIM_COUNTRY_ID = 'vietnam';
-const DEFAULT_FIVE_SIM_COUNTRY_LABEL = '越南 (Vietnam)';
+const DEFAULT_SMSPOOL_COUNTRY_LABEL = '美国 +1 (United States)';
+const SMSPOOL_SUPPORTED_COUNTRY_ITEMS = Object.freeze([
+  { id: 1, label: '美国 +1 (United States)', searchText: '1 US United States 美国 +1' },
+  { id: 22, label: '美国虚拟 +1 (United States Virtual)', searchText: '22 US Virtual United States 美国虚拟 +1' },
+  { id: 23, label: '法国 +33 (France)', searchText: '23 FR France 法国 +33' },
+  { id: 52, label: '泰国 +66 (Thailand)', searchText: '52 TH Thailand 泰国 +66' },
+  { id: 54, label: '台湾 +886 (Taiwan)', searchText: '54 TW Taiwan 台湾 +886' },
+  { id: 157, label: '日本 +81 (Japan)', searchText: '157 JP Japan 日本 +81' },
+]);
+const DEFAULT_FIVE_SIM_COUNTRY_ID = 'thailand';
+const DEFAULT_FIVE_SIM_COUNTRY_LABEL = '泰国 (Thailand)';
 const FIVE_SIM_SUPPORTED_COUNTRY_ITEMS = Object.freeze([
   { id: 'indonesia', chn: '印度尼西亚', eng: 'Indonesia', searchText: 'indonesia 印度尼西亚 印尼 Indonesia ID +62' },
   { id: 'thailand', chn: '泰国', eng: 'Thailand', searchText: 'thailand 泰国 Thailand TH +66' },
+  { id: 'taiwan', chn: '台湾', eng: 'Taiwan', searchText: 'taiwan 台湾 Taiwan TW +886' },
   { id: 'england', chn: '英国', eng: 'England', searchText: 'england 英国 England UK GB United Kingdom +44' },
   { id: 'usa', chn: '美国', eng: 'United States', searchText: 'usa 美国 United States US +1' },
   { id: 'japan', chn: '日本', eng: 'Japan', searchText: 'japan 日本 Japan JP +81' },
+  { id: 'canada', chn: '加拿大', eng: 'Canada', searchText: 'canada 加拿大 Canada CA +1' },
+  { id: 'france', chn: '法国', eng: 'France', searchText: 'france 法国 France FR +33' },
+  { id: 'easttimor', chn: '东帝汶', eng: 'East Timor', searchText: 'easttimor 东帝汶 Timor-Leste East Timor TL +670' },
   { id: 'germany', chn: '德国', eng: 'Germany', searchText: 'germany 德国 Germany DE +49' },
   { id: 'vietnam', chn: '越南', eng: 'Vietnam', searchText: 'vietnam 越南 Vietnam VN +84' },
 ]);
 const FIVE_SIM_SUPPORTED_COUNTRY_ID_SET = new Set(FIVE_SIM_SUPPORTED_COUNTRY_ITEMS.map((item) => item.id));
 const NEX_SMS_FALLBACK_COUNTRY_ITEMS = Object.freeze([
-  { id: 1, label: 'Ukraine (#1)', searchText: 'Ukraine 1 UA' },
-  { id: 6, label: 'Indonesia (#6)', searchText: 'Indonesia 6 ID' },
-  { id: 7, label: 'Malaysia (#7)', searchText: 'Malaysia 7 MY' },
+  { id: 52, label: '泰国 +66 (Thailand)', searchText: '52 TH Thailand 泰国 +66' },
+  { id: 55, label: '台湾 +886 (Taiwan)', searchText: '55 TW Taiwan 台湾 +886' },
+  { id: 187, label: '美国 +1 (USA)', searchText: '187 US USA United States 美国 +1' },
+  { id: 182, label: '日本 +81 (Japan)', searchText: '182 JP Japan 日本 +81' },
+  { id: 204, label: '纽埃 +683 (Niue)', searchText: '204 NU Niue 纽埃 +683' },
+  { id: 36, label: '加拿大 +1 (Canada)', searchText: '36 CA Canada 加拿大 +1' },
+  { id: 78, label: '法国 +33 (France)', searchText: '78 FR France 法国 +33' },
+  { id: 91, label: '东帝汶 +670 (Timor-Leste)', searchText: '91 TL Timor-Leste East Timor 东帝汶 +670' },
+  { id: 6, label: '印度尼西亚 +62 (Indonesia)', searchText: '6 ID Indonesia 印度尼西亚 +62' },
+  { id: 7, label: '马来西亚 +60 (Malaysia)', searchText: '7 MY Malaysia 马来西亚 +60' },
 ]);
 const DEFAULT_IP_PROXY_SERVICE = '711proxy';
 const SUPPORTED_IP_PROXY_SERVICES = ['711proxy', 'lumiproxy', 'iproyal', 'omegaproxy'];
@@ -5533,7 +5576,7 @@ function normalizeFiveSimCountryOrderValue(value = []) {
   if (!normalized.length) {
     return [];
   }
-  return normalized.slice(0, 10);
+  return normalized.slice(0, HERO_SMS_COUNTRY_SELECTION_MAX);
 }
 
 function formatFiveSimCountryOrderValue(value = []) {
@@ -5585,7 +5628,7 @@ function normalizeNexSmsCountryOrderValue(value = []) {
   if (!normalized.length) {
     return [];
   }
-  return normalized.slice(0, 10);
+  return normalized.slice(0, HERO_SMS_COUNTRY_SELECTION_MAX);
 }
 
 function normalizeNexSmsServiceCodeValue(value = '') {
@@ -5736,7 +5779,7 @@ function normalizeSmsBowerCountryOrderValue(value = []) {
     seen.add(id);
     normalized.push(id);
   });
-  return normalized.slice(0, 10);
+  return normalized.slice(0, SMS_BOWER_COUNTRY_SELECTION_MAX);
 }
 
 function normalizeSmsBowerServiceCodeValue(value = '') {
@@ -7561,6 +7604,59 @@ async function loadHeroSmsCountries() {
       fallbackItems.forEach((entry) => heroSmsCountrySearchTextById.set(String(entry.id), entry.searchText));
       if (typeof showToast === 'function') {
         showToast(`5sim 国家列表加载失败：${normalizeHeroSmsFetchErrorMessage(error)}（已切换为内置国家列表）`, 'warn', 2800);
+      }
+    }
+  } else if (provider === PHONE_SMS_PROVIDER_SMSPOOL) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch('https://api.smspool.net/country/retrieve_all', {
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const countries = Array.isArray(payload) ? payload : [];
+      const optionItems = countries
+        .filter((item) => Number(item?.ID ?? item?.id) > 0 && String(item?.name || '').trim())
+        .map((item) => {
+          const id = normalizeHeroSmsCountryId(item.ID ?? item.id, 0);
+          const name = String(item.name || '').trim();
+          const cc = String(item.cc || '').replace(/[^\d]/g, '');
+          const shortName = String(item.short_name || item.iso || '').trim();
+          const label = `${name}${cc ? ` +${cc}` : ''}`;
+          return {
+            id,
+            label,
+            searchText: `${id} ${label} ${shortName} ${item.region || ''}`.trim(),
+          };
+        })
+        .filter((entry) => entry.id > 0)
+        .sort((left, right) => String(left.label || '').localeCompare(String(right.label || '')));
+      if (!optionItems.length) {
+        throw new Error('国家列表为空');
+      }
+      heroSmsCountrySearchTextById.clear();
+      optionItems.forEach((entry) => heroSmsCountrySearchTextById.set(String(entry.id), entry.searchText));
+      applyOptions(optionItems, selectHeroSmsCountry);
+      applyOptions(optionItems, selectHeroSmsCountryFallback);
+    } catch (error) {
+      console.debug('加载 SMSPool 国家列表失败，已使用内置国家列表：', error);
+      const fallbackItems = SMSPOOL_SUPPORTED_COUNTRY_ITEMS.map((item) => ({
+        id: item.id,
+        label: item.label,
+        searchText: item.searchText,
+      }));
+      applyOptions(fallbackItems, selectHeroSmsCountry);
+      applyOptions(fallbackItems, selectHeroSmsCountryFallback);
+      heroSmsCountrySearchTextById.clear();
+      fallbackItems.forEach((entry) => heroSmsCountrySearchTextById.set(String(entry.id), entry.searchText));
+      if (typeof showToast === 'function') {
+        showToast(`SMSPool 国家列表加载失败：${normalizeHeroSmsFetchErrorMessage(error)}（已切换为内置国家列表）`, 'warn', 2800);
       }
     }
   } else if (provider === PHONE_SMS_PROVIDER_SMS_VERIFICATION_NUMBER) {

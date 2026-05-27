@@ -7,7 +7,7 @@
   const DEFAULT_SERVICE_CODE = '671';
   const DEFAULT_SERVICE_LABEL = 'OpenAI / ChatGPT';
   const DEFAULT_COUNTRY_ID = 1;
-  const DEFAULT_COUNTRY_LABEL = 'United States';
+  const DEFAULT_COUNTRY_LABEL = '美国 +1 (United States)';
 
   function normalizeServiceCode(value = '', fallback = DEFAULT_SERVICE_CODE) {
     if (typeof root?.PhoneSmsBowerProvider?.normalizeSmsBowerServiceCode === 'function') {

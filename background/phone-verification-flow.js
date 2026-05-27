@@ -23,13 +23,13 @@
       DEFAULT_FIVE_SIM_BASE_URL = 'https://5sim.net/v1',
       DEFAULT_FIVE_SIM_PRODUCT = 'openai',
       DEFAULT_FIVE_SIM_OPERATOR = 'any',
-      DEFAULT_FIVE_SIM_COUNTRY_ORDER = ['thailand'],
+      DEFAULT_FIVE_SIM_COUNTRY_ORDER = ['thailand', 'taiwan', 'usa', 'japan', 'canada', 'france', 'easttimor'],
       DEFAULT_NEX_SMS_BASE_URL = 'https://api.nexsms.net',
-      DEFAULT_NEX_SMS_COUNTRY_ORDER = [1],
+      DEFAULT_NEX_SMS_COUNTRY_ORDER = [52, 55, 187, 182, 204, 36, 78, 91],
       DEFAULT_NEX_SMS_SERVICE_CODE = 'dr',
       DEFAULT_SMSBOWER_BASE_URL = 'https://smsbower.page/stubs/handler_api.php',
       DEFAULT_SMSBOWER_SERVICE_CODE = 'dr',
-      DEFAULT_SMS_BOWER_COUNTRY_ORDER = [12, 187, 19, 38, 7, 52],
+      DEFAULT_SMS_BOWER_COUNTRY_ORDER = [52, 55, 12, 187, 182, 204, 36, 78, 91, 19, 38, 7],
       DEFAULT_SMS_BOWER_SERVICE_CODE = DEFAULT_SMSBOWER_SERVICE_CODE,
       DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL = 'https://sms-verification-number.com/stubs/handler_api',
       DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE = 'dr',
@@ -45,8 +45,8 @@
       createSmsVerificationNumberProvider = null,
       createGrizzlySmsProvider = null,
       createSmsPoolProvider = null,
-      HERO_SMS_COUNTRY_ID = 33,
-      HERO_SMS_COUNTRY_LABEL = 'Colombia',
+      HERO_SMS_COUNTRY_ID = 52,
+      HERO_SMS_COUNTRY_LABEL = '泰国 (Thailand)',
       HERO_SMS_SERVICE_CODE = 'dr',
       HERO_SMS_SERVICE_LABEL = 'OpenAI',
       DEFAULT_PHONE_CODE_WAIT_SECONDS = 60,
@@ -120,6 +120,12 @@
     const SMSBOWER_COUNTRY_DIAL_PREFIX_BY_ID = Object.freeze({
       12: '1',
       187: '1',
+      36: '1',
+      55: '886',
+      78: '33',
+      91: '670',
+      182: '81',
+      204: '683',
       19: '234',
       38: '233',
       7: '60',
@@ -131,7 +137,14 @@
       '234',
       '233',
       '227',
+      '886',
+      '683',
+      '678',
+      '670',
+      '500',
       '66',
+      '81',
+      '33',
       '62',
       '60',
       '84',
@@ -162,6 +175,9 @@
       { prefix: '57', id: 33, label: 'Colombia' },
       { prefix: '62', id: 6, label: 'Indonesia' },
       { prefix: '44', id: 16, label: 'United Kingdom' },
+      { prefix: '886', id: 55, label: 'Taiwan' },
+      { prefix: '670', id: 91, label: 'Timor-Leste' },
+      { prefix: '683', id: 204, label: 'Niue' },
       { prefix: '81', id: 182, label: 'Japan' },
       { prefix: '49', id: 43, label: 'Germany' },
       { prefix: '55', id: 73, label: 'Brazil' },
@@ -304,7 +320,7 @@
         seen.add(id);
         normalized.push(id);
       });
-      return normalized.slice(0, 10);
+      return normalized.slice(0, 12);
     }
 
     function resolveNexSmsCountryCandidates(state = {}) {
@@ -385,7 +401,7 @@
         normalized.push(code);
       });
 
-      return normalized.slice(0, 10);
+      return normalized.slice(0, 12);
     }
 
     function resolveFiveSimCountryCandidates(state = {}) {

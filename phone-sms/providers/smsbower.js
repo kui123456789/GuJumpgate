@@ -10,14 +10,20 @@
   const DEFAULT_BASE_URL = 'https://smsbower.page/stubs/handler_api.php';
   const DEFAULT_SERVICE_CODE = 'dr';
   const DEFAULT_SERVICE_LABEL = 'OpenAI';
-  const DEFAULT_COUNTRY_ID = 12;
-  const DEFAULT_COUNTRY_LABEL = '美国 +1 (United States)';
-  const DEFAULT_COUNTRY_ORDER = Object.freeze([12, 187, 19, 38, 7, 52]);
+  const DEFAULT_COUNTRY_ID = 52;
+  const DEFAULT_COUNTRY_LABEL = '泰国 +66 (Thailand)';
+  const DEFAULT_COUNTRY_ORDER = Object.freeze([52, 55, 12, 187, 182, 204, 36, 78, 91, 19, 38, 7]);
   const SUPPORTED_COUNTRY_ITEMS = Object.freeze([
+    { id: 52, label: '泰国 +66 (Thailand)', phonePrefix: '66', searchText: '52 TH Thailand 泰国 +66' },
+    { id: 55, label: '台湾 +886 (Taiwan)', phonePrefix: '886', searchText: '55 TW Taiwan 台湾 +886' },
     { id: 12, label: '美国 +1 (United States)', phonePrefix: '1', searchText: '12 US USA United States 美国 +1 实体' },
     { id: 187, label: '美国虚拟 +1 (United States Virtual)', phonePrefix: '1', searchText: '187 US USA United States Virtual 美国虚拟 +1' },
+    { id: 182, label: '日本 +81 (Japan)', phonePrefix: '81', searchText: '182 JP Japan 日本 +81' },
+    { id: 204, label: '纽埃 +683 (Niue)', phonePrefix: '683', searchText: '204 NU Niue 纽埃 +683' },
+    { id: 36, label: '加拿大 +1 (Canada)', phonePrefix: '1', searchText: '36 CA Canada 加拿大 +1' },
+    { id: 78, label: '法国 +33 (France)', phonePrefix: '33', searchText: '78 FR France 法国 +33' },
+    { id: 91, label: '东帝汶 +670 (Timor-Leste)', phonePrefix: '670', searchText: '91 TL Timor-Leste East Timor 东帝汶 +670' },
     { id: 19, label: '尼日利亚 +234 (Nigeria)', phonePrefix: '234', searchText: '19 NG Nigeria 尼日利亚 +234' },
-    { id: 52, label: '泰国 +66 (Thailand)', phonePrefix: '66', searchText: '52 TH Thailand 泰国 +66' },
     { id: 7, label: '马来西亚 +60 (Malaysia)', phonePrefix: '60', searchText: '7 MY Malaysia 马来西亚 +60' },
     { id: 38, label: '加纳 +233 (Ghana)', phonePrefix: '233', searchText: '38 GH Ghana 加纳 +233' },
     { id: 6, label: '印度尼西亚 +62 (Indonesia)', phonePrefix: '62', searchText: '6 ID Indonesia 印度尼西亚 +62' },
@@ -26,8 +32,8 @@
   const KNOWN_DIAL_PREFIXES = Object.freeze([
     '1246', '1264', '1268', '1284', '1340', '1345', '1441', '1473', '1649', '1664', '1670', '1671', '1684',
     '1721', '1758', '1767', '1784', '1809', '1829', '1849', '1868', '1869', '1876',
-    '971', '962', '886', '880', '856', '855', '852', '853', '673', '672', '670', '599', '598', '597', '596',
-    '595', '594', '593', '592', '591', '590', '509', '508', '507', '506', '505', '504', '503', '502', '501',
+    '971', '962', '886', '880', '856', '855', '852', '853', '683', '678', '673', '672', '670', '599', '598', '597', '596',
+    '595', '594', '593', '592', '591', '590', '509', '508', '507', '506', '505', '504', '503', '502', '501', '500',
     '423', '421', '420', '389', '387', '386', '385', '383', '382', '381', '380', '379', '378', '377', '376',
     '375', '374', '373', '372', '371', '370', '359', '358', '357', '356', '355', '354', '353', '352', '351',
     '350', '299', '298', '297', '291', '290', '269', '268', '267', '266', '265', '264', '263', '262', '261',
@@ -86,7 +92,7 @@
       normalized.push(id);
     });
 
-    if (normalized.length) return normalized.slice(0, 10);
+    if (normalized.length) return normalized.slice(0, 12);
 
     const fallback = Array.isArray(fallbackOrder) ? fallbackOrder : DEFAULT_COUNTRY_ORDER;
     fallback.forEach((entry) => {
@@ -100,7 +106,7 @@
       seen.add(id);
       normalized.push(id);
     });
-    return normalized.length ? normalized.slice(0, 10) : [...DEFAULT_COUNTRY_ORDER];
+    return normalized.length ? normalized.slice(0, 12) : [...DEFAULT_COUNTRY_ORDER];
   }
 
   function normalizeSmsBowerCountryFallback(value = []) {
@@ -304,7 +310,7 @@
 
   function normalizeSmsBowerPhoneForSubmit(phoneNumber = '', countryId = DEFAULT_COUNTRY_ID) {
     const digits = String(phoneNumber || '').replace(/[^\d]/g, '');
-    if ([12, 187].includes(normalizeSmsBowerCountryId(countryId, 0))) {
+    if ([1, 12, 22, 36, 187].includes(normalizeSmsBowerCountryId(countryId, 0))) {
       if (digits.length === 11 && digits.startsWith('1')) {
         return digits.slice(1);
       }

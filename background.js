@@ -644,8 +644,17 @@ const DEFAULT_LUCKMAIL_PROJECT_CODE = 'openai';
 const DEFAULT_HERO_SMS_BASE_URL = 'https://hero-sms.com/stubs/handler_api.php';
 const HERO_SMS_SERVICE_CODE = 'dr';
 const HERO_SMS_SERVICE_LABEL = 'OpenAI';
-const HERO_SMS_COUNTRY_ID = 33;
-const HERO_SMS_COUNTRY_LABEL = 'Colombia';
+const HERO_SMS_COUNTRY_ID = 52;
+const HERO_SMS_COUNTRY_LABEL = '泰国 (Thailand)';
+const DEFAULT_HANDLER_API_COUNTRY_FALLBACK = Object.freeze([
+  { id: 55, label: '台湾 +886 (Taiwan)' },
+  { id: 187, label: '美国 +1 (USA)' },
+  { id: 182, label: '日本 +81 (Japan)' },
+  { id: 204, label: '纽埃 +683 (Niue)' },
+  { id: 36, label: '加拿大 +1 (Canada)' },
+  { id: 78, label: '法国 +33 (France)' },
+  { id: 91, label: '东帝汶 +670 (Timor-Leste)' },
+]);
 const PHONE_SMS_PROVIDER_HERO = 'hero-sms';
 const PHONE_SMS_PROVIDER_5SIM = '5sim';
 const PHONE_SMS_PROVIDER_HERO_SMS = PHONE_SMS_PROVIDER_HERO;
@@ -672,14 +681,22 @@ const DEFAULT_PHONE_SMS_PROVIDER_ORDER = Object.freeze([
 const DEFAULT_FIVE_SIM_BASE_URL = 'https://5sim.net/v1';
 const DEFAULT_FIVE_SIM_PRODUCT = 'openai';
 const DEFAULT_FIVE_SIM_OPERATOR = 'any';
-const DEFAULT_FIVE_SIM_COUNTRY_ORDER = Object.freeze(['thailand']);
+const DEFAULT_FIVE_SIM_COUNTRY_ORDER = Object.freeze([
+  'thailand',
+  'taiwan',
+  'usa',
+  'japan',
+  'canada',
+  'france',
+  'easttimor',
+]);
 const DEFAULT_NEX_SMS_BASE_URL = 'https://api.nexsms.net';
 const DEFAULT_NEX_SMS_SERVICE_CODE = 'dr';
-const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([1]);
+const DEFAULT_NEX_SMS_COUNTRY_ORDER = Object.freeze([52, 55, 187, 182, 204, 36, 78, 91]);
 const DEFAULT_SMSBOWER_BASE_URL = 'https://smsbower.page/stubs/handler_api.php';
 const DEFAULT_SMSBOWER_SERVICE_CODE = 'dr';
 const DEFAULT_SMS_BOWER_SERVICE_CODE = DEFAULT_SMSBOWER_SERVICE_CODE;
-const DEFAULT_SMS_BOWER_COUNTRY_ORDER = Object.freeze([187, 7, 38, 52]);
+const DEFAULT_SMS_BOWER_COUNTRY_ORDER = Object.freeze([52, 55, 12, 187, 182, 204, 36, 78, 91, 19, 38, 7]);
 const DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL = 'https://sms-verification-number.com/stubs/handler_api';
 const DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE = 'dr';
 const DEFAULT_GRIZZLY_SMS_BASE_URL = 'https://api.grizzlysms.com/stubs/handler_api.php';
@@ -687,17 +704,17 @@ const DEFAULT_GRIZZLY_SMS_SERVICE_CODE = 'dr';
 const DEFAULT_SMSPOOL_BASE_URL = 'https://api.smspool.net/stubs/handler_api.php?setting=smspool';
 const DEFAULT_SMSPOOL_SERVICE_CODE = '671';
 const DEFAULT_SMSPOOL_COUNTRY_ID = 1;
-const DEFAULT_SMSPOOL_COUNTRY_LABEL = 'United States';
+const DEFAULT_SMSPOOL_COUNTRY_LABEL = '美国 +1 (United States)';
 const DEFAULT_HERO_SMS_REUSE_ENABLED = true;
 const HERO_SMS_ACQUIRE_PRIORITY_COUNTRY = 'country';
 const HERO_SMS_ACQUIRE_PRIORITY_PRICE = 'price';
 const HERO_SMS_ACQUIRE_PRIORITY_PRICE_HIGH = 'price_high';
 const DEFAULT_HERO_SMS_ACQUIRE_PRIORITY = HERO_SMS_ACQUIRE_PRIORITY_COUNTRY;
-const FIVE_SIM_COUNTRY_ID = 'vietnam';
-const FIVE_SIM_COUNTRY_LABEL = '越南 (Vietnam)';
-const FIVE_SIM_SUPPORTED_COUNTRY_IDS = ['indonesia', 'thailand', 'vietnam'];
+const FIVE_SIM_COUNTRY_ID = 'thailand';
+const FIVE_SIM_COUNTRY_LABEL = '泰国 (Thailand)';
+const FIVE_SIM_SUPPORTED_COUNTRY_IDS = ['indonesia', 'thailand', 'taiwan', 'usa', 'japan', 'canada', 'france', 'easttimor', 'vietnam'];
 const FIVE_SIM_SUPPORTED_COUNTRY_ID_SET = new Set(FIVE_SIM_SUPPORTED_COUNTRY_IDS);
-const HERO_SMS_SUPPORTED_COUNTRY_IDS = [4, 6, 8, 10, 15, 16, 32, 33, 43, 52, 73, 78, 151, 182, 187];
+const HERO_SMS_SUPPORTED_COUNTRY_IDS = [4, 6, 8, 10, 15, 16, 32, 33, 36, 43, 52, 55, 73, 78, 91, 151, 182, 187, 204];
 const HERO_SMS_SUPPORTED_COUNTRY_ID_SET = new Set(HERO_SMS_SUPPORTED_COUNTRY_IDS.map(String));
 const HERO_SMS_COUNTRY_BY_PHONE_PREFIX = Object.freeze([
   { prefix: '63', id: 4, label: 'Philippines' },
@@ -709,6 +726,9 @@ const HERO_SMS_COUNTRY_BY_PHONE_PREFIX = Object.freeze([
   { prefix: '57', id: 33, label: 'Colombia' },
   { prefix: '62', id: 6, label: 'Indonesia' },
   { prefix: '44', id: 16, label: 'United Kingdom' },
+  { prefix: '886', id: 55, label: 'Taiwan' },
+  { prefix: '670', id: 91, label: 'Timor-Leste' },
+  { prefix: '683', id: 204, label: 'Niue' },
   { prefix: '81', id: 182, label: 'Japan' },
   { prefix: '49', id: 43, label: 'Germany' },
   { prefix: '55', id: 73, label: 'Brazil' },
@@ -1215,7 +1235,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   heroSmsPreferredPrice: '',
   heroSmsCountryId: HERO_SMS_COUNTRY_ID,
   heroSmsCountryLabel: HERO_SMS_COUNTRY_LABEL,
-  heroSmsCountryFallback: [],
+  heroSmsCountryFallback: DEFAULT_HANDLER_API_COUNTRY_FALLBACK.map((entry) => ({ ...entry })),
   fiveSimApiKey: '',
   fiveSimProduct: DEFAULT_FIVE_SIM_PRODUCT,
   fiveSimCountryId: FIVE_SIM_COUNTRY_ID,
@@ -1232,8 +1252,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   smsBowerCountryOrder: [...DEFAULT_SMS_BOWER_COUNTRY_ORDER],
   smsBowerBaseUrl: DEFAULT_SMSBOWER_BASE_URL,
   smsBowerServiceCode: DEFAULT_SMSBOWER_SERVICE_CODE,
-  smsBowerCountryId: 187,
-  smsBowerCountryLabel: '美国 +1 (United States)',
+  smsBowerCountryId: 52,
+  smsBowerCountryLabel: '泰国 +66 (Thailand)',
   smsBowerCountryFallback: [],
   smsBowerMinPrice: '',
   smsBowerMaxPrice: '',
@@ -1245,7 +1265,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   smsVerificationNumberServiceCode: DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE,
   smsVerificationNumberCountryId: HERO_SMS_COUNTRY_ID,
   smsVerificationNumberCountryLabel: HERO_SMS_COUNTRY_LABEL,
-  smsVerificationNumberCountryFallback: [],
+  smsVerificationNumberCountryFallback: DEFAULT_HANDLER_API_COUNTRY_FALLBACK.map((entry) => ({ ...entry })),
   smsVerificationNumberMinPrice: '',
   smsVerificationNumberMaxPrice: '',
   smsVerificationNumberPreferredPrice: '',
@@ -1253,8 +1273,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   grizzlySmsBaseUrl: DEFAULT_GRIZZLY_SMS_BASE_URL,
   grizzlySmsServiceCode: DEFAULT_GRIZZLY_SMS_SERVICE_CODE,
   grizzlySmsCountryId: 52,
-  grizzlySmsCountryLabel: 'Thailand',
-  grizzlySmsCountryFallback: [],
+  grizzlySmsCountryLabel: '泰国 +66 (Thailand)',
+  grizzlySmsCountryFallback: DEFAULT_HANDLER_API_COUNTRY_FALLBACK.map((entry) => ({ ...entry })),
   grizzlySmsMinPrice: '',
   grizzlySmsMaxPrice: '',
   grizzlySmsPreferredPrice: '',
@@ -1263,7 +1283,13 @@ const PERSISTED_SETTING_DEFAULTS = {
   smsPoolServiceCode: DEFAULT_SMSPOOL_SERVICE_CODE,
   smsPoolCountryId: DEFAULT_SMSPOOL_COUNTRY_ID,
   smsPoolCountryLabel: DEFAULT_SMSPOOL_COUNTRY_LABEL,
-  smsPoolCountryFallback: [],
+  smsPoolCountryFallback: [
+    { id: 54, label: '台湾 +886 (Taiwan)' },
+    { id: 22, label: '美国虚拟 +1 (United States Virtual)' },
+    { id: 157, label: '日本 +81 (Japan)' },
+    { id: 23, label: '法国 +33 (France)' },
+    { id: 52, label: '泰国 +66 (Thailand)' },
+  ],
   smsPoolMinPrice: '',
   smsPoolMaxPrice: '',
   smsPoolPreferredPrice: '',
@@ -2170,7 +2196,7 @@ function normalizeFiveSimCountryOrder(value = []) {
     normalized.push(code);
   });
 
-  return normalized.slice(0, 10);
+  return normalized.slice(0, 12);
 }
 
 function normalizeNexSmsCountryId(value, fallback = 0) {
@@ -2207,7 +2233,7 @@ function normalizeNexSmsCountryOrder(value = []) {
     seen.add(id);
     normalized.push(id);
   });
-  return normalized.slice(0, 10);
+  return normalized.slice(0, 12);
 }
 
 function normalizeNexSmsServiceCode(value = '', fallback = DEFAULT_NEX_SMS_SERVICE_CODE) {
@@ -2227,7 +2253,7 @@ function normalizeNexSmsServiceCode(value = '', fallback = DEFAULT_NEX_SMS_SERVI
     : DEFAULT_NEX_SMS_SERVICE_CODE;
 }
 
-function normalizeSmsBowerCountryId(value, fallback = 187) {
+function normalizeSmsBowerCountryId(value, fallback = 52) {
   const rootScope = typeof self !== 'undefined' ? self : globalThis;
   if (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryId) {
     return rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryId(value, fallback);
@@ -2237,7 +2263,7 @@ function normalizeSmsBowerCountryId(value, fallback = 187) {
     return parsed;
   }
   const fallbackParsed = Math.floor(Number(fallback));
-  return Number.isFinite(fallbackParsed) && fallbackParsed > 0 ? fallbackParsed : 187;
+  return Number.isFinite(fallbackParsed) && fallbackParsed > 0 ? fallbackParsed : 52;
 }
 
 function normalizeSmsBowerCountryOrder(value = []) {
@@ -2267,7 +2293,7 @@ function normalizeSmsBowerCountryOrder(value = []) {
     normalized.push(id);
   });
   if (normalized.length) {
-    return normalized.slice(0, 10);
+    return normalized.slice(0, 12);
   }
   return [...DEFAULT_SMS_BOWER_COUNTRY_ORDER];
 }
@@ -3935,10 +3961,10 @@ function normalizePersistentSettingValue(key, value) {
       if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
       }
-      return 187;
+      return 52;
     }
     case 'smsBowerCountryLabel':
-      return String(value || '美国 +1 (United States)').trim() || '美国 +1 (United States)';
+      return String(value || '泰国 +66 (Thailand)').trim() || '泰国 +66 (Thailand)';
     case 'smsBowerCountryFallback':
       return normalizeHeroSmsCountryFallback(value);
     case 'smsBowerMinPrice':
@@ -3980,7 +4006,7 @@ function normalizePersistentSettingValue(key, value) {
       return 52;
     }
     case 'grizzlySmsCountryLabel':
-      return String(value || 'Thailand').trim() || 'Thailand';
+      return String(value || '泰国 +66 (Thailand)').trim() || '泰国 +66 (Thailand)';
     case 'grizzlySmsCountryFallback':
       return normalizeHeroSmsCountryFallback(value);
     case 'grizzlySmsMinPrice':
@@ -4145,6 +4171,64 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
     payload.ipProxyUsername = String(activeProfile?.username || payload.ipProxyUsername || '').trim();
     payload.ipProxyPassword = String(activeProfile?.password || payload.ipProxyPassword || '');
     payload.ipProxyRegion = String(activeProfile?.region || payload.ipProxyRegion || '').trim();
+  }
+
+  const countryOrderEquals = (value, expected) => (
+    Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => String(entry) === String(expected[index]))
+  );
+  const countryFallbackEmpty = (value) => !Array.isArray(value) || value.length === 0;
+  if (
+    countryOrderEquals(payload.fiveSimCountryOrder, ['thailand'])
+    || countryOrderEquals(payload.fiveSimCountryOrder, ['vietnam'])
+  ) {
+    payload.fiveSimCountryOrder = [...DEFAULT_FIVE_SIM_COUNTRY_ORDER];
+  }
+  if (countryOrderEquals(payload.nexSmsCountryOrder, [1])) {
+    payload.nexSmsCountryOrder = [...DEFAULT_NEX_SMS_COUNTRY_ORDER];
+  }
+  if (
+    countryOrderEquals(payload.smsBowerCountryOrder, [12, 187, 19, 38, 7, 52])
+    || countryOrderEquals(payload.smsBowerCountryOrder, [187, 7, 38, 52])
+  ) {
+    payload.smsBowerCountryOrder = [...DEFAULT_SMS_BOWER_COUNTRY_ORDER];
+  }
+  if (
+    [33, 52].includes(Math.floor(Number(payload.heroSmsCountryId) || 0))
+    && countryFallbackEmpty(payload.heroSmsCountryFallback)
+  ) {
+    payload.heroSmsCountryId = HERO_SMS_COUNTRY_ID;
+    payload.heroSmsCountryLabel = HERO_SMS_COUNTRY_LABEL;
+    payload.heroSmsCountryFallback = DEFAULT_HANDLER_API_COUNTRY_FALLBACK.map((entry) => ({ ...entry }));
+  }
+  if (
+    [33, 52].includes(Math.floor(Number(payload.smsVerificationNumberCountryId) || 0))
+    && countryFallbackEmpty(payload.smsVerificationNumberCountryFallback)
+  ) {
+    payload.smsVerificationNumberCountryId = HERO_SMS_COUNTRY_ID;
+    payload.smsVerificationNumberCountryLabel = HERO_SMS_COUNTRY_LABEL;
+    payload.smsVerificationNumberCountryFallback = DEFAULT_HANDLER_API_COUNTRY_FALLBACK.map((entry) => ({ ...entry }));
+  }
+  if (
+    Math.floor(Number(payload.grizzlySmsCountryId) || 0) === 52
+    && countryFallbackEmpty(payload.grizzlySmsCountryFallback)
+  ) {
+    payload.grizzlySmsCountryLabel = '泰国 +66 (Thailand)';
+    payload.grizzlySmsCountryFallback = DEFAULT_HANDLER_API_COUNTRY_FALLBACK.map((entry) => ({ ...entry }));
+  }
+  if (
+    Math.floor(Number(payload.smsPoolCountryId) || 0) === DEFAULT_SMSPOOL_COUNTRY_ID
+    && countryFallbackEmpty(payload.smsPoolCountryFallback)
+  ) {
+    payload.smsPoolCountryLabel = DEFAULT_SMSPOOL_COUNTRY_LABEL;
+    payload.smsPoolCountryFallback = [
+      { id: 54, label: '台湾 +886 (Taiwan)' },
+      { id: 22, label: '美国虚拟 +1 (United States Virtual)' },
+      { id: 157, label: '日本 +81 (Japan)' },
+      { id: 23, label: '法国 +33 (France)' },
+      { id: 52, label: '泰国 +66 (Thailand)' },
+    ];
   }
 
   return payload;
