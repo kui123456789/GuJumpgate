@@ -106,7 +106,7 @@
       seen.add(id);
       normalized.push(id);
     });
-    return normalized.length ? normalized.slice(0, 12) : [...DEFAULT_COUNTRY_ORDER];
+    return normalized.slice(0, 12);
   }
 
   function normalizeSmsBowerCountryFallback(value = []) {
@@ -308,6 +308,74 @@
     };
   }
 
+  function hasSmsBowerSpecificPriceBounds(state = {}) {
+    return Boolean(
+      normalizeSmsBowerPrice(state.smsBowerMinPrice)
+      || normalizeSmsBowerPrice(state.smsBowerMaxPrice)
+    );
+  }
+
+  function normalizeSmsBowerPriceLimit(value = '') {
+    const normalized = normalizeSmsBowerPrice(value);
+    return normalized ? Number(normalized) : null;
+  }
+
+  function isSmsBowerPriceWithinBounds(price, minPrice = null, maxPrice = null) {
+    const numeric = Number(price);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return false;
+    }
+    if (minPrice !== null && numeric < minPrice) {
+      return false;
+    }
+    if (maxPrice !== null && numeric > maxPrice) {
+      return false;
+    }
+    return true;
+  }
+
+  function buildSmsBowerRequestPriceCandidates(priceEntries = [], priceBounds = {}) {
+    const minPrice = normalizeSmsBowerPriceLimit(priceBounds.minPrice);
+    const maxPrice = normalizeSmsBowerPriceLimit(priceBounds.maxPrice);
+    const hasMinPrice = minPrice !== null;
+    const hasMaxPrice = maxPrice !== null;
+    if (!hasMinPrice && !hasMaxPrice) {
+      return [{ minPrice: '', maxPrice: '' }];
+    }
+
+    const prices = Array.from(new Set(
+      (Array.isArray(priceEntries) ? priceEntries : [])
+        .filter((entry) => entry?.inStock !== false)
+        .map((entry) => Number(entry?.cost))
+        .filter((price) => Number.isFinite(price) && price > 0)
+        .map((price) => Math.round(price * 10000) / 10000)
+    )).sort((left, right) => left - right);
+
+    const inRange = prices.filter((price) => isSmsBowerPriceWithinBounds(price, minPrice, maxPrice));
+    if (inRange.length) {
+      return inRange.map((price) => ({
+        minPrice: hasMinPrice ? String(minPrice) : '',
+        maxPrice: String(price),
+      }));
+    }
+
+    const hasCatalogBelowMin = hasMinPrice && prices.some((price) => price < minPrice);
+    const hasCatalogAboveMax = hasMaxPrice && prices.some((price) => price > maxPrice);
+    let probePrice = null;
+    if (hasCatalogBelowMin && !hasCatalogAboveMax) {
+      probePrice = minPrice;
+    } else if (hasCatalogAboveMax && !hasCatalogBelowMin) {
+      probePrice = maxPrice;
+    } else {
+      probePrice = maxPrice ?? minPrice;
+    }
+
+    return [{
+      minPrice: hasMinPrice ? String(minPrice) : '',
+      maxPrice: probePrice !== null ? String(probePrice) : '',
+    }];
+  }
+
   function normalizeSmsBowerPhoneForSubmit(phoneNumber = '', countryId = DEFAULT_COUNTRY_ID) {
     const digits = String(phoneNumber || '').replace(/[^\d]/g, '');
     if ([1, 12, 22, 36, 187].includes(normalizeSmsBowerCountryId(countryId, 0))) {
@@ -352,6 +420,7 @@
     let activationId = '';
     let rawPhoneNumber = '';
     let activationCost;
+    let canGetAnotherSms;
 
     if (typeof record === 'string') {
       const match = record.trim().match(/^ACCESS_NUMBER:([^:]+):(.+)$/i);
@@ -363,6 +432,11 @@
       activationId = String(record.activationId ?? record.id ?? '').trim();
       rawPhoneNumber = String(record.rawPhoneNumber ?? record.phoneNumber ?? record.phone ?? '').trim();
       activationCost = record.activationCost ?? record.price ?? record.cost;
+      if (record.canGetAnotherSms !== undefined && record.canGetAnotherSms !== null) {
+        canGetAnotherSms = record.canGetAnotherSms === true
+          || record.canGetAnotherSms === 1
+          || String(record.canGetAnotherSms).trim().toLowerCase() === 'true';
+      }
     }
 
     if (!activationId || !rawPhoneNumber) return null;
@@ -379,7 +453,17 @@
       countryLabel: normalizeSmsBowerCountryLabel(fallback.countryLabel || fallback.label, countryId),
       successfulUses: Math.max(0, Math.floor(Number(record?.successfulUses) || 0)),
       maxUses: 1,
+      ...(Array.isArray(record?.smsBowerIgnoredCodes) || Array.isArray(fallback?.smsBowerIgnoredCodes)
+        ? {
+          smsBowerIgnoredCodes: Array.from(new Set(
+            (Array.isArray(record?.smsBowerIgnoredCodes) ? record.smsBowerIgnoredCodes : fallback.smsBowerIgnoredCodes)
+              .map((entry) => extractVerificationCode(entry))
+              .filter(Boolean)
+          )),
+        }
+        : {}),
       ...(activationCost !== undefined ? { price: Number(activationCost) } : {}),
+      ...(canGetAnotherSms !== undefined ? { canGetAnotherSms } : {}),
     };
   }
 
@@ -418,43 +502,66 @@
 
     const failures = [];
     let lastError = null;
+    const requestActions = priceBounds.minPrice || priceBounds.maxPrice
+      ? ['getNumber']
+      : ['getNumberV2', 'getNumber'];
     for (const countryConfig of countryCandidates) {
-      for (const action of ['getNumber']) {
+      let priceCandidates = buildSmsBowerRequestPriceCandidates([], priceBounds);
+      if (hasSmsBowerSpecificPriceBounds(state)) {
         try {
-          const payload = await fetchPayload(config, {
-            action,
-            service: serviceCode,
-            country: normalizeSmsBowerCountryId(countryConfig.id),
-            minPrice: priceBounds.minPrice,
-            maxPrice: priceBounds.maxPrice,
-          }, `SMSBower ${action}`);
-          const activation = normalizeActivation(payload, {
-            serviceCode,
-            countryId: countryConfig.id,
-            countryLabel: countryConfig.label,
-          });
-          if (activation) {
-            const dialMismatch = getSmsBowerCountryDialMismatch(activation, countryConfig);
-            if (dialMismatch) {
-              await setActivationStatus(state, activation, 8, deps).catch(() => '');
-              failures.push(`${countryConfig.label}: 返回号码区号 +${dialMismatch.actualPrefix} 与国家区号 +${dialMismatch.expectedPrefix} 不匹配，已取消订单`);
-              continue;
-            }
-            return activation;
-          }
-          const text = describePayload(payload);
-          if (isTerminalPayload(text)) {
-            throw new Error(`SMSBower ${action}失败：${text}`);
-          }
-          failures.push(`${countryConfig.label}: ${text || '空响应'}`);
+          const pricePayload = await fetchPrices(state, countryConfig, deps);
+          priceCandidates = buildSmsBowerRequestPriceCandidates(
+            collectPriceEntries(pricePayload, []),
+            priceBounds
+          );
         } catch (error) {
-          const payloadOrMessage = error?.payload || error?.message;
-          const text = describePayload(payloadOrMessage);
-          if (isTerminalPayload(payloadOrMessage) && !isNoNumbersPayload(payloadOrMessage)) {
-            throw new Error(`SMSBower 获取手机号失败：${text || '未知错误'}`);
-          }
           lastError = error;
-          failures.push(`${countryConfig.label}: ${text || error?.message || '未知错误'}`);
+        }
+      }
+      for (const requestPrice of priceCandidates) {
+        for (const action of requestActions) {
+          try {
+            const payload = await fetchPayload(config, {
+              action,
+              service: serviceCode,
+              country: normalizeSmsBowerCountryId(countryConfig.id),
+              minPrice: requestPrice.minPrice,
+              maxPrice: requestPrice.maxPrice,
+            }, `SMSBower ${action}`);
+            const activation = normalizeActivation(payload, {
+              serviceCode,
+              countryId: countryConfig.id,
+              countryLabel: countryConfig.label,
+            });
+            if (activation) {
+              const dialMismatch = countryCandidates.length > 1
+                ? getSmsBowerCountryDialMismatch(activation, countryConfig)
+                : null;
+              if (dialMismatch) {
+                await setActivationStatus(state, activation, 8, deps).catch(() => '');
+                failures.push(`${countryConfig.label}: 返回号码区号 +${dialMismatch.actualPrefix} 与国家区号 +${dialMismatch.expectedPrefix} 不匹配，已取消订单`);
+                continue;
+              }
+              return activation;
+            }
+            const text = describePayload(payload);
+            if (isTerminalPayload(text) && !(action === 'getNumberV2' && /BAD_ACTION/i.test(text))) {
+              throw new Error(`SMSBower ${action}失败：${text}`);
+            }
+            failures.push(`${countryConfig.label}: ${text || '空响应'}`);
+          } catch (error) {
+            const payloadOrMessage = error?.payload || error?.message;
+            const text = describePayload(payloadOrMessage);
+            if (
+              isTerminalPayload(payloadOrMessage)
+              && !isNoNumbersPayload(payloadOrMessage)
+              && !(action === 'getNumberV2' && /BAD_ACTION/i.test(text))
+            ) {
+              throw new Error(`SMSBower 获取手机号失败：${text || '未知错误'}`);
+            }
+            lastError = error;
+            failures.push(`${countryConfig.label}: ${text || error?.message || '未知错误'}`);
+          }
         }
       }
     }
@@ -474,6 +581,48 @@
       status: Math.floor(Number(status) || 0),
     }, `SMSBower setStatus(${status})`);
     return describePayload(payload);
+  }
+
+  function resolveIgnoredCodeSet(activation = null) {
+    const ignoredCodes = Array.isArray(activation?.smsBowerIgnoredCodes)
+      ? activation.smsBowerIgnoredCodes
+      : [];
+    return new Set(ignoredCodes.map((entry) => extractVerificationCode(entry)).filter(Boolean));
+  }
+
+  function extractCodeFromStatusText(statusText = '') {
+    const okMatch = String(statusText || '').match(/^STATUS_OK:(.+)$/i);
+    return okMatch ? extractVerificationCode(okMatch[1]) : '';
+  }
+
+  async function captureExistingCodesForActivation(state = {}, activation, deps = {}) {
+    const normalizedActivation = normalizeActivation(activation, activation);
+    if (!normalizedActivation) {
+      return [];
+    }
+    try {
+      const payload = await fetchPayload(resolveConfig(state, deps), {
+        action: 'getStatus',
+        id: normalizedActivation.activationId,
+      }, 'SMSBower capture existing sms');
+      const code = extractCodeFromStatusText(describePayload(payload));
+      return code ? [code] : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function reuseActivation(state = {}, activation, deps = {}) {
+    const normalizedActivation = normalizeActivation(activation, activation);
+    if (!normalizedActivation) {
+      throw new Error('缺少可复用的 SMSBower 手机号订单。');
+    }
+    const existingCodes = await captureExistingCodesForActivation(state, normalizedActivation, deps);
+    await setActivationStatus(state, normalizedActivation, 3, deps);
+    return {
+      ...normalizedActivation,
+      ...(existingCodes.length ? { smsBowerIgnoredCodes: existingCodes } : {}),
+    };
   }
 
   async function finishActivation(state = {}, activation, deps = {}) {
@@ -527,6 +676,8 @@
     const start = Date.now();
     let pollCount = 0;
     let lastResponse = '';
+    const ignoredCodes = resolveIgnoredCodeSet(normalizedActivation);
+    let ignoredHistoricalCodeLogged = false;
 
     while (Date.now() - start < timeoutMs) {
       if (maxRounds > 0 && pollCount >= maxRounds) break;
@@ -548,8 +699,30 @@
         });
       }
 
-      const code = extractVerificationCodeFromStatus(lastResponse);
-      if (code) return code;
+      const code = extractCodeFromStatusText(lastResponse);
+      if (code) {
+        if (!ignoredCodes.has(code)) {
+          return code;
+        }
+        if (!ignoredHistoricalCodeLogged) {
+          ignoredHistoricalCodeLogged = true;
+          await deps.addLog?.(
+            `步骤 8：SMSBower 复用订单 ${normalizedActivation.phoneNumber} 命中历史验证码，继续等待新短信。`,
+            'info'
+          );
+        }
+        if (typeof options.onWaitingForCode === 'function') {
+          await options.onWaitingForCode({
+            activation: normalizedActivation,
+            elapsedMs: Date.now() - start,
+            pollCount,
+            statusText: lastResponse,
+            timeoutMs,
+          });
+        }
+        await deps.sleepWithStop(intervalMs);
+        continue;
+      }
 
       if (isWaitingStatus(lastResponse)) {
         if (typeof options.onWaitingForCode === 'function') {
@@ -622,6 +795,7 @@
 
   function createProvider(deps = {}) {
     const providerDeps = {
+      addLog: deps.addLog,
       fetchImpl: deps.fetchImpl,
       sleepWithStop: deps.sleepWithStop,
       throwIfStopped: deps.throwIfStopped,
@@ -644,6 +818,7 @@
       normalizeServiceCode: normalizeSmsBowerServiceCode,
       resolveCountryCandidates,
       requestActivation: (state, options) => requestActivation(state, options, providerDeps),
+      reuseActivation: (state, activation) => reuseActivation(state, activation, providerDeps),
       finishActivation: (state, activation) => finishActivation(state, activation, providerDeps),
       cancelActivation: (state, activation) => cancelActivation(state, activation, providerDeps),
       banActivation: (state, activation) => cancelActivation(state, activation, providerDeps),
