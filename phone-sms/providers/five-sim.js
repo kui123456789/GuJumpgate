@@ -367,6 +367,16 @@
   }
 
   function resolveCountryCandidates(state = {}) {
+    const hasExplicitCountryOrder = Object.prototype.hasOwnProperty.call(state, 'fiveSimCountryOrder')
+      && state.fiveSimCountryOrder !== undefined
+      && state.fiveSimCountryOrder !== null;
+    if (hasExplicitCountryOrder) {
+      return normalizeFiveSimCountryFallback(state.fiveSimCountryOrder).map((entry) => ({
+        id: entry.id,
+        label: formatFiveSimCountryLabel(entry.id, entry.label || entry.id, entry.id),
+      }));
+    }
+
     const primary = resolveCountryConfig(state);
     const fallbackList = normalizeFiveSimCountryFallback(state.fiveSimCountryFallback);
     const seen = new Set([primary.id]);

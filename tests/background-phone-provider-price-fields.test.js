@@ -1,8 +1,13 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 require('../background/phone-verification-flow.js');
 require('../phone-sms/providers/smsbower.js');
+
+const rootDir = path.resolve(__dirname, '..');
+const backgroundJs = fs.readFileSync(path.join(rootDir, 'background.js'), 'utf8');
 
 function createHelpers(overrides = {}) {
   return globalThis.MultiPageBackgroundPhoneVerification.createPhoneVerificationHelpers({
@@ -136,6 +141,47 @@ test('SMS Verification Number generic service aliases use OpenAI service', async
   assert.equal(getNumberUrls.length, 1);
   assert.equal(getNumberUrls[0].searchParams.get('maxPrice'), '0.11');
   assert.equal(getNumberUrls[0].searchParams.get('service'), 'dr');
+});
+
+test('Hero-like fallback providers preserve explicitly cleared country selection', async () => {
+  const getNumberUrls = [];
+  const helpers = createHelpers({
+    fetchImpl: async (url) => {
+      const parsed = new URL(String(url));
+      if (parsed.searchParams.get('action') === 'getNumber') {
+        getNumberUrls.push(parsed);
+      }
+      return {
+        ok: true,
+        text: async () => 'ACCESS_NUMBER:unexpected:15557654321',
+      };
+    },
+  });
+
+  await assert.rejects(
+    () => helpers.requestPhoneActivation({
+      phoneSmsProvider: 'grizzlysms',
+      grizzlySmsApiKey: 'grizzly-key',
+      grizzlySmsCountryId: 0,
+      grizzlySmsCountryFallback: [],
+      grizzlySmsServiceCode: 'dr',
+    }),
+    /未选择国家|没有可用国家|候选国家|country/i
+  );
+
+  assert.equal(getNumberUrls.length, 0);
+});
+
+test('persistent settings allow zero country id as explicit Hero-like clear marker', () => {
+  for (const key of [
+    'heroSmsCountryId',
+    'smsVerificationNumberCountryId',
+    'grizzlySmsCountryId',
+    'smsPoolCountryId',
+  ]) {
+    const pattern = new RegExp(`case '${key}'[\\s\\S]*?parsed === 0[\\s\\S]*?return 0`);
+    assert.match(backgroundJs, pattern);
+  }
 });
 
 test('SMSBower activation uses SMSBower price fields instead of HeroSMS price fields', async () => {

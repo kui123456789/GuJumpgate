@@ -34,6 +34,14 @@ test('smsbower exposes OpenAI service and supported countries including requeste
   assert.equal(countriesById.get(38).label, '加纳 +233 (Ghana)');
 });
 
+test('smsbower preserves an explicitly cleared country order', () => {
+  assert.deepEqual(smsBower.normalizeSmsBowerCountryOrder([], []), []);
+  assert.deepEqual(smsBower.normalizeSmsBowerCountryOrder([]), []);
+
+  const provider = smsBower.createProvider();
+  assert.deepEqual(provider.resolveCountryCandidates({ smsBowerCountryOrder: [] }), []);
+});
+
 test('smsbower normalizes US +1 numbers to local ten digit submit phone', () => {
   assert.equal(smsBower.normalizeSmsBowerPhoneForSubmit('+12092905100', 12), '2092905100');
   assert.equal(smsBower.normalizeSmsBowerPhoneForSubmit('12092905100', 12), '2092905100');

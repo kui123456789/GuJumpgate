@@ -70,13 +70,16 @@
     return String(fallback || '').trim() || DEFAULT_COUNTRY_LABEL;
   }
 
-  function normalizeSmsBowerCountryOrder(value = [], fallbackOrder = DEFAULT_COUNTRY_ORDER) {
-    const source = Array.isArray(value)
-      ? value
-      : String(value || '')
-        .split(/[\r\n,，;；]+/)
-        .map((entry) => String(entry || '').trim())
-        .filter(Boolean);
+  function normalizeSmsBowerCountryOrder(value, fallbackOrder = DEFAULT_COUNTRY_ORDER) {
+    const hasExplicitValue = value !== undefined && value !== null;
+    const source = hasExplicitValue
+      ? (Array.isArray(value)
+        ? value
+        : String(value || '')
+          .split(/[\r\n,，;；]+/)
+          .map((entry) => String(entry || '').trim())
+          .filter(Boolean))
+      : (Array.isArray(fallbackOrder) ? fallbackOrder : DEFAULT_COUNTRY_ORDER);
     const normalized = [];
     const seen = new Set();
 
@@ -92,10 +95,10 @@
       normalized.push(id);
     });
 
+    if (hasExplicitValue) return normalized.slice(0, 12);
     if (normalized.length) return normalized.slice(0, 12);
 
-    const fallback = Array.isArray(fallbackOrder) ? fallbackOrder : DEFAULT_COUNTRY_ORDER;
-    fallback.forEach((entry) => {
+    DEFAULT_COUNTRY_ORDER.forEach((entry) => {
       const id = normalizeSmsBowerCountryId(
         entry && typeof entry === 'object' && !Array.isArray(entry)
           ? (entry.id ?? entry.countryId ?? entry.country ?? '')
@@ -274,8 +277,11 @@
   }
 
   function resolveCountryCandidates(state = {}) {
-    const countryOrder = normalizeSmsBowerCountryOrder(state.smsBowerCountryOrder, []);
-    if (countryOrder.length) {
+    const hasExplicitCountryOrder = Object.prototype.hasOwnProperty.call(state, 'smsBowerCountryOrder')
+      && state.smsBowerCountryOrder !== undefined
+      && state.smsBowerCountryOrder !== null;
+    if (hasExplicitCountryOrder) {
+      const countryOrder = normalizeSmsBowerCountryOrder(state.smsBowerCountryOrder, []);
       return countryOrder.map((id) => ({
         id,
         label: normalizeSmsBowerCountryLabel('', id),

@@ -13,6 +13,33 @@ function extractFunction(name) {
   return sidepanelJs.slice(start, nextFunction === -1 ? undefined : nextFunction);
 }
 
+function extractFunctionCalls(functionName) {
+  const calls = [];
+  let cursor = 0;
+  const needle = `${functionName}(`;
+  while (cursor < sidepanelJs.length) {
+    const start = sidepanelJs.indexOf(needle, cursor);
+    if (start < 0) break;
+    const before = sidepanelJs.slice(Math.max(0, start - 20), start);
+    cursor = start + needle.length;
+    if (/function\s+$/.test(before)) continue;
+    let depth = 0;
+    for (let index = start; index < sidepanelJs.length; index += 1) {
+      const char = sidepanelJs[index];
+      if (char === '(') depth += 1;
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          calls.push(sidepanelJs.slice(start, index + 1));
+          cursor = index + 1;
+          break;
+        }
+      }
+    }
+  }
+  return calls;
+}
+
 test('sidepanel has one phone SMS provider change handler', () => {
   const listeners = sidepanelJs.match(/selectPhoneSmsProvider\?\.addEventListener\('change'/g) || [];
   assert.equal(listeners.length, 1);
@@ -57,6 +84,29 @@ test('switching provider restores the target provider API key from its own field
   assert.match(switchProvider, /inputFiveSimApiKey\.value\s*=\s*String\(latestState\?\.fiveSimApiKey\s*\|\|\s*''\)/);
   assert.match(switchProvider, /inputNexSmsApiKey\.value\s*=\s*String\(latestState\?\.nexSmsApiKey\s*\|\|\s*''\)/);
   assert.match(switchProvider, /inputSmsBowerApiKey\.value\s*=\s*String\(latestState\?\.smsBowerApiKey\s*\|\|\s*''\)/);
+});
+
+test('sidepanel preserves cleared country order when applying provider state', () => {
+  for (const functionName of [
+    'applyFiveSimCountrySelection',
+    'applyNexSmsCountrySelection',
+    'applySmsBowerCountrySelection',
+  ]) {
+    const calls = extractFunctionCalls(functionName);
+    assert.ok(calls.length >= 4, `expected ${functionName} call sites`);
+    for (const call of calls) {
+      assert.match(call, /ensureDefault:\s*false/, call);
+    }
+  }
+});
+
+test('sidepanel can persist explicitly cleared Hero-like country selection', () => {
+  const getSelectedHeroCountry = extractFunction('getSelectedHeroSmsCountryOption');
+  const switchProvider = extractFunction('switchPhoneSmsProvider');
+
+  assert.match(getSelectedHeroCountry, /return\s+selectedCountries\[0\]\s*\|\|\s*null/);
+  assert.match(switchProvider, /getPhoneSmsCountrySelectionForProvider\(previousProvider,\s*\{\s*ensureDefault:\s*false\s*\}\)/);
+  assert.match(sidepanelJs, /id:\s*0,\s*label:\s*''/);
 });
 
 test('sidepanel sanitizes handler-api service codes when saving settings', () => {

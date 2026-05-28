@@ -479,15 +479,19 @@
     }
 
     function resolveFiveSimCountryCandidates(state = {}) {
-      let codes = normalizeFiveSimCountryOrder(state?.fiveSimCountryOrder);
-      if (!codes.length) {
-        const legacyPrimary = normalizeFiveSimCountryCode(state?.fiveSimCountryId, '');
-        const legacyFallback = normalizeFiveSimCountryOrder(state?.fiveSimCountryFallback);
-        codes = normalizeFiveSimCountryOrder([
-          ...(legacyPrimary ? [legacyPrimary] : []),
-          ...legacyFallback,
-        ]);
-      }
+      const hasExplicitCountryOrder = Object.prototype.hasOwnProperty.call(state, 'fiveSimCountryOrder')
+        && state.fiveSimCountryOrder !== undefined
+        && state.fiveSimCountryOrder !== null;
+      const codes = hasExplicitCountryOrder
+        ? normalizeFiveSimCountryOrder(state?.fiveSimCountryOrder)
+        : (() => {
+          const legacyPrimary = normalizeFiveSimCountryCode(state?.fiveSimCountryId, '');
+          const legacyFallback = normalizeFiveSimCountryOrder(state?.fiveSimCountryFallback);
+          return normalizeFiveSimCountryOrder([
+            ...(legacyPrimary ? [legacyPrimary] : []),
+            ...legacyFallback,
+          ]);
+        })();
       return codes.map((code) => ({
         code,
         id: code,
@@ -3106,12 +3110,12 @@
           apiKey,
           baseUrl: normalizeUrl(state.smsVerificationNumberBaseUrl, DEFAULT_SMS_VERIFICATION_NUMBER_BASE_URL),
           serviceCode: normalizeSmsBowerServiceCode(state.smsVerificationNumberServiceCode, DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE),
-          countryCandidates: resolveCountryCandidates({
-            ...state,
-            heroSmsCountryId: state?.smsVerificationNumberCountryId || state?.heroSmsCountryId,
-            heroSmsCountryLabel: state?.smsVerificationNumberCountryLabel || state?.heroSmsCountryLabel,
-            heroSmsCountryFallback: state?.smsVerificationNumberCountryFallback || state?.heroSmsCountryFallback,
-          }),
+        countryCandidates: resolveCountryCandidates({
+          ...state,
+          heroSmsCountryId: state?.smsVerificationNumberCountryId ?? state?.heroSmsCountryId,
+          heroSmsCountryLabel: state?.smsVerificationNumberCountryLabel || state?.heroSmsCountryLabel,
+          heroSmsCountryFallback: state?.smsVerificationNumberCountryFallback ?? state?.heroSmsCountryFallback,
+        }),
         };
       }
 
@@ -3125,12 +3129,12 @@
           apiKey,
           baseUrl: normalizeUrl(state.grizzlySmsBaseUrl, DEFAULT_GRIZZLY_SMS_BASE_URL),
           serviceCode: normalizeSmsBowerServiceCode(state.grizzlySmsServiceCode, DEFAULT_GRIZZLY_SMS_SERVICE_CODE),
-          countryCandidates: resolveCountryCandidates({
-            ...state,
-            heroSmsCountryId: state?.grizzlySmsCountryId || state?.heroSmsCountryId,
-            heroSmsCountryLabel: state?.grizzlySmsCountryLabel || state?.heroSmsCountryLabel,
-            heroSmsCountryFallback: state?.grizzlySmsCountryFallback || state?.heroSmsCountryFallback,
-          }),
+        countryCandidates: resolveCountryCandidates({
+          ...state,
+          heroSmsCountryId: state?.grizzlySmsCountryId ?? state?.heroSmsCountryId,
+          heroSmsCountryLabel: state?.grizzlySmsCountryLabel || state?.heroSmsCountryLabel,
+          heroSmsCountryFallback: state?.grizzlySmsCountryFallback ?? state?.heroSmsCountryFallback,
+        }),
         };
       }
       if (provider === PHONE_SMS_PROVIDER_SMSPOOL) {
@@ -3143,12 +3147,12 @@
           apiKey,
           baseUrl: normalizeUrl(state.smsPoolBaseUrl, DEFAULT_SMSPOOL_BASE_URL),
           serviceCode: normalizeSmsBowerServiceCode(state.smsPoolServiceCode, DEFAULT_SMSPOOL_SERVICE_CODE),
-          countryCandidates: resolveCountryCandidates({
-            ...state,
-            heroSmsCountryId: state?.smsPoolCountryId || state?.heroSmsCountryId,
-            heroSmsCountryLabel: state?.smsPoolCountryLabel || state?.heroSmsCountryLabel,
-            heroSmsCountryFallback: state?.smsPoolCountryFallback || state?.heroSmsCountryFallback,
-          }),
+        countryCandidates: resolveCountryCandidates({
+          ...state,
+          heroSmsCountryId: state?.smsPoolCountryId ?? state?.heroSmsCountryId,
+          heroSmsCountryLabel: state?.smsPoolCountryLabel || state?.heroSmsCountryLabel,
+          heroSmsCountryFallback: state?.smsPoolCountryFallback ?? state?.heroSmsCountryFallback,
+        }),
         };
       }
       if (provider === PHONE_SMS_PROVIDER_CHATGPT_API) {
@@ -4721,7 +4725,7 @@
         return requestNexSmsActivation(state, options);
       }
       const heroLikeProviderLabel = getPhoneSmsProviderLabel(config.provider);
-      const allCountryCandidates = Array.isArray(config.countryCandidates) && config.countryCandidates.length
+      const allCountryCandidates = Array.isArray(config.countryCandidates)
         ? config.countryCandidates
         : resolveCountryCandidates(state);
       if (!allCountryCandidates.length) {
@@ -5823,6 +5827,32 @@
         if (provider?.resolveCountryCandidates) {
           return provider.resolveCountryCandidates(state);
         }
+        const hasExplicitSmsBowerCountryOrder = Object.prototype.hasOwnProperty.call(state, 'smsBowerCountryOrder')
+          && state.smsBowerCountryOrder !== undefined
+          && state.smsBowerCountryOrder !== null;
+        if (hasExplicitSmsBowerCountryOrder) {
+          const source = Array.isArray(state.smsBowerCountryOrder)
+            ? state.smsBowerCountryOrder
+            : String(state.smsBowerCountryOrder || '')
+              .split(/[\r\n,，;；]+/)
+              .map((entry) => String(entry || '').trim())
+              .filter(Boolean);
+          const seen = new Set();
+          return source
+            .map((entry) => normalizeCountryId(
+              entry && typeof entry === 'object' && !Array.isArray(entry)
+                ? (entry.id ?? entry.countryId ?? entry.country ?? '')
+                : entry,
+              0
+            ))
+            .filter((id) => {
+              if (!id || seen.has(id)) return false;
+              seen.add(id);
+              return true;
+            })
+            .slice(0, 12)
+            .map((id) => ({ id, label: `Country #${id}` }));
+        }
         const fallbackCandidates = resolveCountryCandidates({
           ...state,
           heroSmsCountryId: state?.smsBowerCountryId || state?.heroSmsCountryId,
@@ -5843,9 +5873,9 @@
         }
         return resolveCountryCandidates({
           ...state,
-          heroSmsCountryId: state?.smsVerificationNumberCountryId || state?.heroSmsCountryId,
+          heroSmsCountryId: state?.smsVerificationNumberCountryId ?? state?.heroSmsCountryId,
           heroSmsCountryLabel: state?.smsVerificationNumberCountryLabel || state?.heroSmsCountryLabel,
-          heroSmsCountryFallback: state?.smsVerificationNumberCountryFallback || state?.heroSmsCountryFallback,
+          heroSmsCountryFallback: state?.smsVerificationNumberCountryFallback ?? state?.heroSmsCountryFallback,
         });
       }
       if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_GRIZZLYSMS) {
@@ -5855,9 +5885,9 @@
         }
         return resolveCountryCandidates({
           ...state,
-          heroSmsCountryId: state?.grizzlySmsCountryId || state?.heroSmsCountryId,
+          heroSmsCountryId: state?.grizzlySmsCountryId ?? state?.heroSmsCountryId,
           heroSmsCountryLabel: state?.grizzlySmsCountryLabel || state?.heroSmsCountryLabel,
-          heroSmsCountryFallback: state?.grizzlySmsCountryFallback || state?.heroSmsCountryFallback,
+          heroSmsCountryFallback: state?.grizzlySmsCountryFallback ?? state?.heroSmsCountryFallback,
         });
       }
       if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_SMSPOOL) {
@@ -5867,9 +5897,9 @@
         }
         return resolveCountryCandidates({
           ...state,
-          heroSmsCountryId: state?.smsPoolCountryId || state?.heroSmsCountryId,
+          heroSmsCountryId: state?.smsPoolCountryId ?? state?.heroSmsCountryId,
           heroSmsCountryLabel: state?.smsPoolCountryLabel || state?.heroSmsCountryLabel,
-          heroSmsCountryFallback: state?.smsPoolCountryFallback || state?.heroSmsCountryFallback,
+          heroSmsCountryFallback: state?.smsPoolCountryFallback ?? state?.heroSmsCountryFallback,
         });
       }
       if (normalizePhoneSmsProvider(providerId) === PHONE_SMS_PROVIDER_CHATGPT_API) {

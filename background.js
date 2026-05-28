@@ -2385,17 +2385,20 @@ function normalizeSmsBowerCountryId(value, fallback = 52) {
   return Number.isFinite(fallbackParsed) && fallbackParsed > 0 ? fallbackParsed : 52;
 }
 
-function normalizeSmsBowerCountryOrder(value = []) {
+function normalizeSmsBowerCountryOrder(value) {
   const rootScope = typeof self !== 'undefined' ? self : globalThis;
   if (rootScope.PhoneSmsBowerProvider?.normalizeSmsBowerCountryOrder) {
     return rootScope.PhoneSmsBowerProvider.normalizeSmsBowerCountryOrder(value);
   }
-  const source = Array.isArray(value)
-    ? value
-    : String(value || '')
-      .split(/[\r\n,，;；]+/)
-      .map((entry) => String(entry || '').trim())
-      .filter(Boolean);
+  const hasExplicitValue = value !== undefined && value !== null;
+  const source = hasExplicitValue
+    ? (Array.isArray(value)
+      ? value
+      : String(value || '')
+        .split(/[\r\n,，;；]+/)
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean))
+    : DEFAULT_SMS_BOWER_COUNTRY_ORDER;
   const normalized = [];
   const seen = new Set();
   source.forEach((entry) => {
@@ -2411,10 +2414,9 @@ function normalizeSmsBowerCountryOrder(value = []) {
     seen.add(id);
     normalized.push(id);
   });
-  if (normalized.length) {
-    return normalized.slice(0, 12);
-  }
-  return [...DEFAULT_SMS_BOWER_COUNTRY_ORDER];
+  return hasExplicitValue || normalized.length
+    ? normalized.slice(0, 12)
+    : [...DEFAULT_SMS_BOWER_COUNTRY_ORDER];
 }
 
 function normalizeSmsBowerServiceCode(value = '', fallback = DEFAULT_SMS_BOWER_SERVICE_CODE) {
@@ -4230,6 +4232,9 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeHeroSmsMaxPrice(value);
     case 'heroSmsCountryId': {
       const parsed = Math.floor(Number(value));
+      if (Number.isFinite(parsed) && parsed === 0) {
+        return 0;
+      }
       if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
       }
@@ -4293,6 +4298,9 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeNexSmsServiceCode(value, DEFAULT_SMS_VERIFICATION_NUMBER_SERVICE_CODE);
     case 'smsVerificationNumberCountryId': {
       const parsed = Math.floor(Number(value));
+      if (Number.isFinite(parsed) && parsed === 0) {
+        return 0;
+      }
       if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
       }
@@ -4314,6 +4322,9 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeNexSmsServiceCode(value, DEFAULT_GRIZZLY_SMS_SERVICE_CODE);
     case 'grizzlySmsCountryId': {
       const parsed = Math.floor(Number(value));
+      if (Number.isFinite(parsed) && parsed === 0) {
+        return 0;
+      }
       if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
       }
@@ -4335,6 +4346,9 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeNexSmsServiceCode(value, DEFAULT_SMSPOOL_SERVICE_CODE);
     case 'smsPoolCountryId': {
       const parsed = Math.floor(Number(value));
+      if (Number.isFinite(parsed) && parsed === 0) {
+        return 0;
+      }
       if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
       }

@@ -24,14 +24,20 @@
   }
 
   function translateState(state = {}) {
+    const countryId = state.smsVerificationNumberCountryId ?? state.smsBowerCountryId ?? DEFAULT_COUNTRY_ID;
+    const countryFallback = state.smsVerificationNumberCountryFallback ?? state.smsBowerCountryFallback ?? [];
+    const countryExplicitlyCleared = Number(countryId) === 0
+      && Array.isArray(countryFallback)
+      && countryFallback.length === 0;
     return {
       ...state,
       smsBowerApiKey: state.smsVerificationNumberApiKey ?? state.smsBowerApiKey ?? '',
       smsBowerBaseUrl: state.smsVerificationNumberBaseUrl ?? state.smsBowerBaseUrl ?? DEFAULT_BASE_URL,
       smsBowerServiceCode: normalizeServiceCode(state.smsVerificationNumberServiceCode, DEFAULT_SERVICE_CODE),
-      smsBowerCountryId: state.smsVerificationNumberCountryId ?? state.smsBowerCountryId ?? DEFAULT_COUNTRY_ID,
+      smsBowerCountryId: countryId,
       smsBowerCountryLabel: state.smsVerificationNumberCountryLabel ?? state.smsBowerCountryLabel ?? DEFAULT_COUNTRY_LABEL,
-      smsBowerCountryFallback: state.smsVerificationNumberCountryFallback ?? state.smsBowerCountryFallback ?? [],
+      smsBowerCountryFallback: countryFallback,
+      ...(countryExplicitlyCleared ? { smsBowerCountryOrder: [] } : {}),
       smsBowerMinPrice: state.smsVerificationNumberMinPrice ?? state.smsBowerMinPrice ?? '',
       smsBowerMaxPrice: state.smsVerificationNumberMaxPrice ?? state.smsBowerMaxPrice ?? '',
       smsBowerPreferredPrice: state.smsVerificationNumberPreferredPrice ?? state.smsBowerPreferredPrice ?? '',

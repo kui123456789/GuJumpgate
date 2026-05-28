@@ -12,12 +12,79 @@ const sidepanelJs = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.j
 const signupPageJs = fs.readFileSync(path.join(rootDir, 'content', 'signup-page.js'), 'utf8');
 const phoneAuthJs = fs.readFileSync(path.join(rootDir, 'content', 'phone-auth.js'), 'utf8');
 
+function extractFunctionSource(source, functionName) {
+  const prefix = `function ${functionName}`;
+  const start = source.indexOf(prefix);
+  assert.notEqual(start, -1, `missing ${functionName}`);
+  const bodyStart = source.indexOf('{', start);
+  assert.notEqual(bodyStart, -1, `missing ${functionName} body`);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1);
+      }
+    }
+  }
+  throw new Error(`unterminated ${functionName}`);
+}
+
+function loadBackgroundSmsBowerCountryOrderNormalizer() {
+  const functionSource = extractFunctionSource(backgroundJs, 'normalizeSmsBowerCountryOrder');
+  const normalizeSmsBowerCountryId = (value, fallback = 52) => {
+    const parsed = Math.floor(Number(value));
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    const fallbackParsed = Math.floor(Number(fallback));
+    return Number.isFinite(fallbackParsed) && fallbackParsed > 0 ? fallbackParsed : 52;
+  };
+  return new Function(
+    'DEFAULT_SMS_BOWER_COUNTRY_ORDER',
+    'normalizeSmsBowerCountryId',
+    `${functionSource}; return normalizeSmsBowerCountryOrder;`
+  )([52, 55, 12], normalizeSmsBowerCountryId);
+}
+
+function extractFunctionCalls(source, functionName) {
+  const calls = [];
+  let cursor = 0;
+  const needle = `${functionName}(`;
+  while (cursor < source.length) {
+    const start = source.indexOf(needle, cursor);
+    if (start < 0) break;
+    const before = source.slice(Math.max(0, start - 20), start);
+    cursor = start + needle.length;
+    if (/function\s+$/.test(before)) continue;
+    let depth = 0;
+    for (let index = start; index < source.length; index += 1) {
+      const char = source[index];
+      if (char === '(') depth += 1;
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          calls.push(source.slice(start, index + 1));
+          cursor = index + 1;
+          break;
+        }
+      }
+    }
+  }
+  return calls;
+}
+
 test('registry and background load SMSBower provider without changing default provider', () => {
   assert.match(registryJs, /PROVIDER_SMSBOWER\s*=\s*'smsbower'/);
   assert.match(registryJs, /label:\s*'SMSBower'/);
   assert.match(registryJs, /moduleKey:\s*'PhoneSmsBowerProvider'/);
   assert.match(registryJs, /DEFAULT_PROVIDER\s*=\s*PROVIDER_HERO_SMS/);
   assert.match(backgroundJs, /phone-sms\/providers\/smsbower\.js/);
+});
+
+test('background preserves an explicitly cleared SMSBower country order', () => {
+  const normalizeSmsBowerCountryOrder = loadBackgroundSmsBowerCountryOrderNormalizer();
+  assert.deepEqual(normalizeSmsBowerCountryOrder([]), []);
 });
 
 test('phone verification flow wires SMSBower into Step9 provider lifecycle', () => {
@@ -75,6 +142,14 @@ test('sidepanel persists SMSBower settings separately from other providers', () 
   assert.match(sidepanelJs, /smsBowerServiceCode:\s*smsBowerServiceCodeValue/);
   assert.match(sidepanelJs, /activePhoneSmsProvider === PHONE_SMS_PROVIDER_SMSBOWER/);
   assert.match(sidepanelJs, /rowHostedSmsAuthPool\.style\.display\s*=\s*showSettings\s*&&\s*hostedSmsProvider/);
+});
+
+test('sidepanel never restores default SMSBower countries when applying explicit state', () => {
+  const calls = extractFunctionCalls(sidepanelJs, 'applySmsBowerCountrySelection');
+  assert.ok(calls.length >= 5, 'expected SMSBower country selection call sites');
+  for (const call of calls) {
+    assert.match(call, /ensureDefault:\s*false/, call);
+  }
 });
 
 test('sidepanel does not show the generic phone API row for SMSBower', () => {

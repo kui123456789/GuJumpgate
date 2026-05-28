@@ -814,6 +814,13 @@
   }
 
   function resolveCountryCandidates(state = {}) {
+    const countryExplicitlyCleared = Object.prototype.hasOwnProperty.call(state, 'smsPoolCountryId')
+      && Number(state.smsPoolCountryId) === 0
+      && Array.isArray(state.smsPoolCountryFallback)
+      && state.smsPoolCountryFallback.length === 0;
+    if (countryExplicitlyCleared) {
+      return [];
+    }
     const primary = {
       id: normalizeCountryId(state.smsPoolCountryId),
       label: normalizeCountryLabel(state.smsPoolCountryLabel),
