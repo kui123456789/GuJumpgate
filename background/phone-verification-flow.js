@@ -866,8 +866,26 @@
       return /whats\s*app/i.test(String(text || ''));
     }
 
+    function isMixedSmsWhatsAppDeliverySelectorText(value = '') {
+      const text = String(value || '').replace(/\s+/g, ' ').trim();
+      return Boolean(
+        text
+        && /whats\s*app/i.test(text)
+        && /(?:^|\b)(?:sms|text\s*message)(?:\b|$)|短信/i.test(text)
+      );
+    }
+
     function isAddPhoneWhatsAppPageState(pageState = {}) {
       if (!pageState || pageState.state !== 'add_phone_page') {
+        return false;
+      }
+      const text = [
+        pageState.addPhoneDeliveryText,
+        Array.isArray(pageState.addPhoneDeliveryCandidates)
+          ? pageState.addPhoneDeliveryCandidates.join(' ')
+          : '',
+      ].filter(Boolean).join(' ');
+      if (isMixedSmsWhatsAppDeliverySelectorText(text)) {
         return false;
       }
       if (pageState.addPhoneWhatsApp === true) {
@@ -877,12 +895,6 @@
       if (channel === 'whatsapp') {
         return true;
       }
-      const text = [
-        pageState.addPhoneDeliveryText,
-        Array.isArray(pageState.addPhoneDeliveryCandidates)
-          ? pageState.addPhoneDeliveryCandidates.join(' ')
-          : '',
-      ].filter(Boolean).join(' ');
       return /whats\s*app/i.test(String(text || ''));
     }
 
@@ -2060,6 +2072,14 @@
       if (!record || typeof record !== 'object' || Array.isArray(record)) {
         return null;
       }
+      const normalizeSmsPoolCode = (value) => {
+        const trimmed = String(value || '').trim();
+        if (!trimmed) {
+          return '';
+        }
+        const digitMatch = trimmed.match(/\b(\d{4,8})\b/);
+        return digitMatch?.[1] || '';
+      };
       const activationId = String(
         record.activationId ?? record.id ?? record.activation ?? ''
       ).trim();
@@ -2162,6 +2182,18 @@
         ...(record.phoneCodeReceived ? { phoneCodeReceived: true } : {}),
         ...(record.phoneCodeReceivedAt ? { phoneCodeReceivedAt: Math.max(0, Number(record.phoneCodeReceivedAt) || 0) } : {}),
         ...(record.canGetAnotherSms !== undefined ? { canGetAnotherSms: Boolean(record.canGetAnotherSms) } : {}),
+        ...(Number.isFinite(Number(record.smsPoolResendPreparedAt))
+          ? { smsPoolResendPreparedAt: Math.max(0, Number(record.smsPoolResendPreparedAt) || 0) }
+          : {}),
+        ...(Array.isArray(record.smsPoolIgnoredCodes)
+          ? {
+            smsPoolIgnoredCodes: Array.from(new Set(
+              record.smsPoolIgnoredCodes
+                .map((entry) => normalizeSmsPoolCode(entry))
+                .filter(Boolean)
+            )),
+          }
+          : {}),
       };
     }
 
@@ -5346,8 +5378,7 @@
       const providerId = getActivationProviderId(activation, state);
       const provider = getActivationProviderAdapter(state, activation);
       if (provider?.requestAdditionalSms) {
-        await provider.requestAdditionalSms(state, activation);
-        return;
+        return provider.requestAdditionalSms(state, activation);
       }
       if (providerId === PHONE_SMS_PROVIDER_HOSTED_SMS) {
         return;
@@ -5356,12 +5387,13 @@
       try {
         if (providerId === PHONE_SMS_PROVIDER_FIVE_SIM) {
           // 5sim does not expose a HeroSMS-style setStatus(3) resend primitive.
-          return;
+          return null;
         }
         await setPhoneActivationStatus(providerState, activation, 3, 'HeroSMS setStatus(3)');
       } catch (_) {
         // Best-effort request only.
       }
+      return null;
     }
 
     function isHeroSmsWaitingStatusText(text) {
@@ -7265,7 +7297,7 @@
     }
 
     async function waitForScopedPhoneCode(state = {}, activation, options = {}) {
-      const normalizedActivation = normalizeActivation(activation);
+      let normalizedActivation = normalizeActivation(activation);
       const visibleStep = normalizeLogStep(options?.step) || 4;
       const stepKey = String(options?.stepKey || 'fetch-signup-code').trim() || 'fetch-signup-code';
       const purpose = String(options?.purpose || 'signup').trim() || 'signup';
@@ -7342,7 +7374,19 @@
                 'warn',
                 { step: visibleStep, stepKey }
               );
-              await requestAdditionalPhoneSms(state, normalizedActivation);
+              const requestAdditionalResult = await requestAdditionalPhoneSms(state, normalizedActivation);
+              const nextActivation = normalizeActivation(
+                requestAdditionalResult?.activation
+                || requestAdditionalResult?.nextActivation
+                || requestAdditionalResult
+              );
+              if (nextActivation) {
+                normalizedActivation = nextActivation;
+                await setPhoneRuntimeState({
+                  signupPhoneActivation: nextActivation,
+                  signupPhoneNumber: nextActivation.phoneNumber,
+                });
+              }
               if (typeof options.onTimeoutWindow === 'function') {
                 await options.onTimeoutWindow({
                   activation: normalizedActivation,
@@ -7421,7 +7465,7 @@
     async function completeSignupPhoneVerificationFlow(tabId, options = {}) {
       return withPhoneVerificationLogContext({ step: 4, stepKey: 'fetch-signup-code' }, async () => {
         let state = options?.state || await getState();
-        const activation = normalizeActivation(options?.activation || state?.signupPhoneActivation);
+        let activation = normalizeActivation(options?.activation || state?.signupPhoneActivation);
         const pageStateCheckTimeoutMs = Math.max(1, Math.floor(Number(options?.pageStateCheckTimeoutMs) || 5000));
         if (!activation) {
           throw new Error('步骤 4：未找到当前注册手机号激活记录，请重新执行步骤 2。');
@@ -7506,7 +7550,19 @@
                 throw new Error(`步骤 4：手机验证码连续 ${DEFAULT_PHONE_SUBMIT_ATTEMPTS} 次被拒绝：${invalidErrorText}`);
               }
 
-              await requestAdditionalPhoneSms(state, activation);
+              const requestAdditionalResult = await requestAdditionalPhoneSms(state, activation);
+              const nextActivation = normalizeActivation(
+                requestAdditionalResult?.activation
+                || requestAdditionalResult?.nextActivation
+                || requestAdditionalResult
+              );
+              if (nextActivation) {
+                activation = nextActivation;
+                await setPhoneRuntimeState({
+                  signupPhoneActivation: nextActivation,
+                  signupPhoneNumber: nextActivation.phoneNumber,
+                });
+              }
               try {
                 await resendSignupPhoneVerificationCode(tabId);
               } catch (resendError) {
@@ -7753,7 +7809,19 @@
                 throw new Error(`步骤 ${visibleStep}：登录手机验证码连续 ${DEFAULT_PHONE_SUBMIT_ATTEMPTS} 次被拒绝：${invalidErrorText}`);
               }
 
-              await requestAdditionalPhoneSms(state, activation);
+              const requestAdditionalResult = await requestAdditionalPhoneSms(state, activation);
+              const nextActivation = normalizeActivation(
+                requestAdditionalResult?.activation
+                || requestAdditionalResult?.nextActivation
+                || requestAdditionalResult
+              );
+              if (nextActivation) {
+                activation = nextActivation;
+                await setPhoneRuntimeState({
+                  signupPhoneActivation: nextActivation,
+                  signupPhoneNumber: nextActivation.phoneNumber,
+                });
+              }
               try {
                 await resendLoginPhoneVerificationCode(tabId, { visibleStep });
               } catch (resendError) {
@@ -8615,7 +8683,16 @@
                     );
                     break;
                   }
-                  await requestAdditionalPhoneSms(state, activation);
+                  const requestAdditionalResult = await requestAdditionalPhoneSms(state, activation);
+                  const nextActivation = normalizeActivation(
+                    requestAdditionalResult?.activation
+                    || requestAdditionalResult?.nextActivation
+                    || requestAdditionalResult
+                  );
+                  if (nextActivation) {
+                    activation = nextActivation;
+                    await persistCurrentActivation(nextActivation);
+                  }
                   if (resendProbeResult?.probed) {
                     const resendResult = await resendPhoneVerificationCode(tabId);
                     if (isWhatsAppPhoneResendResult(resendResult)) {
