@@ -354,6 +354,22 @@ const inputFreemailBaseUrl = document.getElementById('input-freemail-base-url');
 const inputFreemailAdminUsername = document.getElementById('input-freemail-admin-username');
 const inputFreemailAdminPassword = document.getElementById('input-freemail-admin-password');
 const inputFreemailDomain = document.getElementById('input-freemail-domain');
+const moemailSection = document.getElementById('moemail-section');
+const btnMoemailDocs = document.getElementById('btn-moemail-docs');
+const rowMoemailBaseUrl = document.getElementById('row-moemail-base-url');
+const rowMoemailApiKey = document.getElementById('row-moemail-api-key');
+const rowMoemailDomain = document.getElementById('row-moemail-domain');
+const inputMoemailBaseUrl = document.getElementById('input-moemail-base-url');
+const inputMoemailApiKey = document.getElementById('input-moemail-api-key');
+const inputMoemailDomain = document.getElementById('input-moemail-domain');
+const yydsmailSection = document.getElementById('yydsmail-section');
+const btnYydsMailDocs = document.getElementById('btn-yydsmail-docs');
+const rowYydsMailBaseUrl = document.getElementById('row-yydsmail-base-url');
+const rowYydsMailApiKey = document.getElementById('row-yydsmail-api-key');
+const rowYydsMailDomain = document.getElementById('row-yydsmail-domain');
+const inputYydsMailBaseUrl = document.getElementById('input-yydsmail-base-url');
+const inputYydsMailApiKey = document.getElementById('input-yydsmail-api-key');
+const inputYydsMailDomain = document.getElementById('input-yydsmail-domain');
 const outlookEmailPlusSection = document.getElementById('outlook-email-plus-section');
 const btnOutlookEmailPlusGithub = document.getElementById('btn-outlook-email-plus-github');
 const rowOutlookEmailPlusBaseUrl = document.getElementById('row-outlook-email-plus-base-url');
@@ -1218,6 +1234,10 @@ const LUCKMAIL_PROVIDER = 'luckmail-api';
 const CLOUDFLARE_TEMP_EMAIL_PROVIDER = 'cloudflare-temp-email';
 const CLOUD_MAIL_PROVIDER = 'cloudmail';
 const FREEMAIL_PROVIDER = 'freemail';
+const MOEMAIL_PROVIDER = 'moemail';
+const MOEMAIL_GENERATOR = 'moemail';
+const YYDSMAIL_PROVIDER = 'yydsmail';
+const YYDSMAIL_GENERATOR = 'yydsmail';
 const OUTLOOK_EMAIL_PLUS_PROVIDER = 'outlook-email-plus';
 const OUTLOOK_EMAIL_PLUS_GENERATOR = 'outlook-email-plus';
 const CUSTOM_EMAIL_POOL_GENERATOR = 'custom-pool';
@@ -1830,6 +1850,16 @@ const MAIL_PROVIDER_LOGIN_CONFIGS = {
     label: 'freemail 部署',
     url: 'https://github.com/idinging/freemail',
     buttonLabel: '部署',
+  },
+  [MOEMAIL_PROVIDER]: {
+    label: 'MoeMail 文档',
+    url: 'https://docs.moemail.app/api',
+    buttonLabel: '文档',
+  },
+  [YYDSMAIL_PROVIDER]: {
+    label: 'YYDS Mail 文档',
+    url: 'https://vip.215.im/docs',
+    buttonLabel: '文档',
   },
   [OUTLOOK_EMAIL_PLUS_PROVIDER]: {
     label: 'Outlook Email Plus 部署',
@@ -3608,6 +3638,12 @@ function normalizeSupportedMailProvider(value = '') {
   if (normalized === FREEMAIL_PROVIDER) {
     return FREEMAIL_PROVIDER;
   }
+  if (normalized === MOEMAIL_PROVIDER) {
+    return MOEMAIL_PROVIDER;
+  }
+  if (normalized === YYDSMAIL_PROVIDER) {
+    return YYDSMAIL_PROVIDER;
+  }
   if (normalized === OUTLOOK_EMAIL_PLUS_PROVIDER) {
     return OUTLOOK_EMAIL_PLUS_PROVIDER;
   }
@@ -4034,6 +4070,54 @@ function normalizeCloudMailDomainValue(value = '') {
   return normalizeCloudflareDomainValue(value);
 }
 
+function normalizeMoemailBaseUrlValue(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    parsed.hash = '';
+    parsed.search = '';
+    const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.origin}${pathname}`;
+  } catch {
+    return '';
+  }
+}
+
+function normalizeMoemailDomainValue(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '');
+}
+
+function normalizeYydsMailBaseUrlValue(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    parsed.hash = '';
+    parsed.search = '';
+    const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.origin}${pathname}`;
+  } catch {
+    return '';
+  }
+}
+
+function normalizeYydsMailDomainValue(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '');
+}
+
 function normalizeFreemailBaseUrlValue(value = '') {
   return normalizeCloudflareTempEmailBaseUrlValue(value);
 }
@@ -4147,6 +4231,30 @@ function applyFreemailSettingsState(state = {}) {
   }
 }
 
+function applyMoemailSettingsState(state = {}) {
+  if (inputMoemailBaseUrl) {
+    inputMoemailBaseUrl.value = state?.moemailBaseUrl || '';
+  }
+  if (inputMoemailApiKey) {
+    inputMoemailApiKey.value = state?.moemailApiKey || '';
+  }
+  if (inputMoemailDomain) {
+    inputMoemailDomain.value = state?.moemailDomain || '';
+  }
+}
+
+function applyYydsMailSettingsState(state = {}) {
+  if (inputYydsMailBaseUrl) {
+    inputYydsMailBaseUrl.value = state?.yydsMailBaseUrl || '';
+  }
+  if (inputYydsMailApiKey) {
+    inputYydsMailApiKey.value = state?.yydsMailApiKey || '';
+  }
+  if (inputYydsMailDomain) {
+    inputYydsMailDomain.value = state?.yydsMailDomain || '';
+  }
+}
+
 function validateFreemailConfigForGeneration(options = {}) {
   const { focusOnError = false } = options;
   if (getSelectedEmailGenerator() !== FREEMAIL_PROVIDER) {
@@ -4180,6 +4288,64 @@ function validateFreemailConfigForGeneration(options = {}) {
       inputFreemailAdminPassword?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
     return { valid: false, message: '请先填写 freemail 管理员密码。' };
+  }
+
+  return { valid: true };
+}
+
+function validateMoemailConfigForGeneration(options = {}) {
+  const { focusOnError = false } = options;
+  if (getSelectedEmailGenerator() !== MOEMAIL_GENERATOR) {
+    return { valid: true };
+  }
+
+  const baseUrl = normalizeMoemailBaseUrlValue(inputMoemailBaseUrl?.value || '');
+  if (!baseUrl) {
+    if (focusOnError) {
+      inputMoemailBaseUrl?.focus();
+      inputMoemailBaseUrl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    return {
+      valid: false,
+      message: '请先填写 MoeMail API 地址，例如 https://your-moemail-domain。',
+    };
+  }
+
+  if (!String(inputMoemailApiKey?.value || '').trim()) {
+    if (focusOnError) {
+      inputMoemailApiKey?.focus();
+      inputMoemailApiKey?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    return { valid: false, message: '请先填写 MoeMail API Key。' };
+  }
+
+  return { valid: true };
+}
+
+function validateYydsMailConfigForGeneration(options = {}) {
+  const { focusOnError = false } = options;
+  if (getSelectedEmailGenerator() !== YYDSMAIL_GENERATOR) {
+    return { valid: true };
+  }
+
+  const baseUrl = normalizeYydsMailBaseUrlValue(inputYydsMailBaseUrl?.value || '');
+  if (!baseUrl) {
+    if (focusOnError) {
+      inputYydsMailBaseUrl?.focus();
+      inputYydsMailBaseUrl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    return {
+      valid: false,
+      message: '请先填写 YYDS Mail API 地址，例如 https://vip.215.im。',
+    };
+  }
+
+  if (!String(inputYydsMailApiKey?.value || '').trim()) {
+    if (focusOnError) {
+      inputYydsMailApiKey?.focus();
+      inputYydsMailApiKey?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    return { valid: false, message: '请先填写 YYDS Mail API Key。' };
   }
 
   return { valid: true };
@@ -4234,6 +4400,18 @@ function collectSettingsPayload() {
     : normalizeCloudflareTempEmailBaseUrlValue;
   const normalizeFreemailDomainInput = typeof normalizeFreemailDomainValue === 'function'
     ? normalizeFreemailDomainValue
+    : normalizeCloudflareTempEmailDomainValue;
+  const normalizeMoemailBaseUrlInput = typeof normalizeMoemailBaseUrlValue === 'function'
+    ? normalizeMoemailBaseUrlValue
+    : normalizeCloudflareTempEmailBaseUrlValue;
+  const normalizeMoemailDomainInput = typeof normalizeMoemailDomainValue === 'function'
+    ? normalizeMoemailDomainValue
+    : normalizeCloudflareTempEmailDomainValue;
+  const normalizeYydsMailBaseUrlInput = typeof normalizeYydsMailBaseUrlValue === 'function'
+    ? normalizeYydsMailBaseUrlValue
+    : normalizeCloudflareTempEmailBaseUrlValue;
+  const normalizeYydsMailDomainInput = typeof normalizeYydsMailDomainValue === 'function'
+    ? normalizeYydsMailDomainValue
     : normalizeCloudflareTempEmailDomainValue;
   const normalizeOutlookEmailPlusBaseUrlInput = typeof normalizeOutlookEmailPlusBaseUrlValue === 'function'
     ? normalizeOutlookEmailPlusBaseUrlValue
@@ -5202,6 +5380,12 @@ function collectSettingsPayload() {
     freemailAdminUsername: ((typeof inputFreemailAdminUsername !== 'undefined' && inputFreemailAdminUsername) ? inputFreemailAdminUsername.value : '').trim(),
     freemailAdminPassword: (typeof inputFreemailAdminPassword !== 'undefined' && inputFreemailAdminPassword) ? inputFreemailAdminPassword.value : '',
     freemailDomain: normalizeFreemailDomainInput((typeof inputFreemailDomain !== 'undefined' && inputFreemailDomain) ? inputFreemailDomain.value : ''),
+    moemailBaseUrl: normalizeMoemailBaseUrlInput((typeof inputMoemailBaseUrl !== 'undefined' && inputMoemailBaseUrl) ? inputMoemailBaseUrl.value : ''),
+    moemailApiKey: ((typeof inputMoemailApiKey !== 'undefined' && inputMoemailApiKey) ? inputMoemailApiKey.value : '').trim(),
+    moemailDomain: normalizeMoemailDomainInput((typeof inputMoemailDomain !== 'undefined' && inputMoemailDomain) ? inputMoemailDomain.value : ''),
+    yydsMailBaseUrl: normalizeYydsMailBaseUrlInput((typeof inputYydsMailBaseUrl !== 'undefined' && inputYydsMailBaseUrl) ? inputYydsMailBaseUrl.value : ''),
+    yydsMailApiKey: ((typeof inputYydsMailApiKey !== 'undefined' && inputYydsMailApiKey) ? inputYydsMailApiKey.value : '').trim(),
+    yydsMailDomain: normalizeYydsMailDomainInput((typeof inputYydsMailDomain !== 'undefined' && inputYydsMailDomain) ? inputYydsMailDomain.value : ''),
     outlookEmailPlusBaseUrl: normalizeOutlookEmailPlusBaseUrlInput((typeof inputOutlookEmailPlusBaseUrl !== 'undefined' && inputOutlookEmailPlusBaseUrl) ? inputOutlookEmailPlusBaseUrl.value : ''),
     outlookEmailPlusApiKey: (typeof inputOutlookEmailPlusApiKey !== 'undefined' && inputOutlookEmailPlusApiKey) ? inputOutlookEmailPlusApiKey.value : '',
     outlookEmailPlusProvider: normalizeOutlookEmailPlusProviderInput((typeof inputOutlookEmailPlusProvider !== 'undefined' && inputOutlookEmailPlusProvider) ? inputOutlookEmailPlusProvider.value : ''),
@@ -12120,6 +12304,12 @@ function applySettingsState(state) {
     const freemailProvider = typeof FREEMAIL_PROVIDER === 'string'
       ? FREEMAIL_PROVIDER
       : 'freemail';
+    const moemailProvider = typeof MOEMAIL_PROVIDER === 'string'
+      ? MOEMAIL_PROVIDER
+      : 'moemail';
+    const yydsmailProvider = typeof YYDSMAIL_PROVIDER === 'string'
+      ? YYDSMAIL_PROVIDER
+      : 'yydsmail';
     const outlookEmailPlusProvider = typeof OUTLOOK_EMAIL_PLUS_PROVIDER === 'string'
       ? OUTLOOK_EMAIL_PLUS_PROVIDER
       : 'outlook-email-plus';
@@ -12140,6 +12330,10 @@ function applySettingsState(state) {
       selectEmailGenerator.value = 'cloudflare-temp-email';
     } else if (restoredMailProvider === freemailProvider) {
       selectEmailGenerator.value = freemailProvider;
+    } else if (restoredMailProvider === moemailProvider) {
+      selectEmailGenerator.value = moemailProvider;
+    } else if (restoredMailProvider === yydsmailProvider) {
+      selectEmailGenerator.value = yydsmailProvider;
     } else if (restoredMailProvider === outlookEmailPlusProvider) {
       selectEmailGenerator.value = outlookEmailPlusGenerator;
     } else if (restoredMailProvider === 'hotmail-api') {
@@ -12160,6 +12354,10 @@ function applySettingsState(state) {
       selectEmailGenerator.value = 'cloudmail';
     } else if (restoredEmailGenerator === freemailProvider) {
       selectEmailGenerator.value = freemailProvider;
+    } else if (restoredEmailGenerator === moemailProvider) {
+      selectEmailGenerator.value = moemailProvider;
+    } else if (restoredEmailGenerator === yydsmailProvider) {
+      selectEmailGenerator.value = yydsmailProvider;
     } else if (restoredEmailGenerator === outlookEmailPlusGenerator) {
       selectEmailGenerator.value = outlookEmailPlusGenerator;
     } else {
@@ -12236,6 +12434,12 @@ function applySettingsState(state) {
   }
   if (typeof applyFreemailSettingsState === 'function') {
     applyFreemailSettingsState(state);
+  }
+  if (typeof applyMoemailSettingsState === 'function') {
+    applyMoemailSettingsState(state);
+  }
+  if (typeof applyYydsMailSettingsState === 'function') {
+    applyYydsMailSettingsState(state);
   }
   if (typeof applyOutlookEmailPlusSettingsState === 'function') {
     applyOutlookEmailPlusSettingsState(state);
@@ -13092,6 +13296,8 @@ function getSelectedEmailGenerator() {
   if (generator === 'cloudflare-temp-email') return 'cloudflare-temp-email';
   if (generator === 'cloudmail') return 'cloudmail';
   if (generator === FREEMAIL_PROVIDER) return FREEMAIL_PROVIDER;
+  if (generator === MOEMAIL_GENERATOR) return MOEMAIL_GENERATOR;
+  if (generator === YYDSMAIL_GENERATOR) return YYDSMAIL_GENERATOR;
   if (generator === OUTLOOK_EMAIL_PLUS_GENERATOR) return OUTLOOK_EMAIL_PLUS_GENERATOR;
   return 'duck';
 }
@@ -13154,6 +13360,22 @@ function getEmailGeneratorUiCopy() {
       placeholder: '点击生成 freemail 邮箱，或手动粘贴邮箱',
       successVerb: '生成',
       label: 'freemail',
+    };
+  }
+  if (getSelectedEmailGenerator() === MOEMAIL_GENERATOR) {
+    return {
+      buttonLabel: '生成',
+      placeholder: '点击生成 MoeMail 邮箱，或手动粘贴邮箱',
+      successVerb: '生成',
+      label: 'MoeMail',
+    };
+  }
+  if (getSelectedEmailGenerator() === YYDSMAIL_GENERATOR) {
+    return {
+      buttonLabel: '生成',
+      placeholder: '点击生成 YYDS Mail 邮箱，或手动粘贴邮箱',
+      successVerb: '生成',
+      label: 'YYDS Mail',
     };
   }
   if (getSelectedEmailGenerator() === OUTLOOK_EMAIL_PLUS_GENERATOR) {
@@ -13587,6 +13809,8 @@ function updateMailProviderUI() {
   const useCloudflareTempEmailProvider = selectMailProvider.value === 'cloudflare-temp-email';
   const useCloudMailProvider = selectMailProvider.value === 'cloudmail';
   const useFreemailProvider = selectMailProvider.value === FREEMAIL_PROVIDER;
+  const useMoemailProvider = selectMailProvider.value === MOEMAIL_PROVIDER;
+  const useYydsMailProvider = selectMailProvider.value === YYDSMAIL_PROVIDER;
   const useOutlookEmailPlusProvider = selectMailProvider.value === OUTLOOK_EMAIL_PLUS_PROVIDER;
   const gmailAliasGenerator = typeof GMAIL_ALIAS_GENERATOR === 'string'
     ? GMAIL_ALIAS_GENERATOR
@@ -13603,6 +13827,10 @@ function updateMailProviderUI() {
     allowedEmailGenerators = new Set(['cloudmail']);
   } else if (useFreemailProvider) {
     allowedEmailGenerators = new Set([FREEMAIL_PROVIDER]);
+  } else if (useMoemailProvider) {
+    allowedEmailGenerators = new Set([MOEMAIL_GENERATOR]);
+  } else if (useYydsMailProvider) {
+    allowedEmailGenerators = new Set([YYDSMAIL_GENERATOR]);
   } else if (useOutlookEmailPlusProvider) {
     allowedEmailGenerators = new Set([OUTLOOK_EMAIL_PLUS_GENERATOR]);
   } else if (useGmail) {
@@ -13639,6 +13867,12 @@ function updateMailProviderUI() {
   if (useFreemailProvider && String(selectEmailGenerator?.value || '').trim().toLowerCase() !== FREEMAIL_PROVIDER) {
     selectEmailGenerator.value = FREEMAIL_PROVIDER;
   }
+  if (useMoemailProvider && String(selectEmailGenerator?.value || '').trim().toLowerCase() !== MOEMAIL_GENERATOR) {
+    selectEmailGenerator.value = MOEMAIL_GENERATOR;
+  }
+  if (useYydsMailProvider && String(selectEmailGenerator?.value || '').trim().toLowerCase() !== YYDSMAIL_GENERATOR) {
+    selectEmailGenerator.value = YYDSMAIL_GENERATOR;
+  }
   if (useOutlookEmailPlusProvider && String(selectEmailGenerator?.value || '').trim().toLowerCase() !== OUTLOOK_EMAIL_PLUS_GENERATOR) {
     selectEmailGenerator.value = OUTLOOK_EMAIL_PLUS_GENERATOR;
   }
@@ -13667,6 +13901,8 @@ function updateMailProviderUI() {
   const useCloudflareTempEmailGenerator = selectedGenerator === 'cloudflare-temp-email';
   const useCloudMailGenerator = selectedGenerator === 'cloudmail';
   const useFreemailGenerator = selectedGenerator === FREEMAIL_PROVIDER;
+  const useMoemailGenerator = selectedGenerator === MOEMAIL_GENERATOR;
+  const useYydsMailGenerator = selectedGenerator === YYDSMAIL_GENERATOR;
   const useOutlookEmailPlusGenerator = selectedGenerator === OUTLOOK_EMAIL_PLUS_GENERATOR;
   const showCloudflareDomain = useEmailGenerator && useCloudflare;
   const showCloudflareTempEmailSettings = useCloudflareTempEmailProvider || (useEmailGenerator && useCloudflareTempEmailGenerator);
@@ -13686,6 +13922,9 @@ function updateMailProviderUI() {
   const showCloudMailDomain = useEmailGenerator && useCloudMailGenerator;
   const showFreemailSettings = useFreemailProvider || (useEmailGenerator && useFreemailGenerator);
   const showFreemailDomain = useEmailGenerator && useFreemailGenerator;
+  const showMoemailSettings = useMoemailProvider || (useEmailGenerator && useMoemailGenerator);
+  const showMoemailDomain = useEmailGenerator && useMoemailGenerator;
+  const showYydsMailSettings = useYydsMailProvider || (useEmailGenerator && useYydsMailGenerator);
   const showOutlookEmailPlusSettings = useOutlookEmailPlusProvider || (useEmailGenerator && useOutlookEmailPlusGenerator);
   const useIcloudApiProvider = isIcloudApiMailProvider();
   const selectedIcloudHost = typeof getSelectedIcloudHostPreference === 'function'
@@ -13728,6 +13967,18 @@ function updateMailProviderUI() {
   if (typeof rowFreemailAdminUsername !== 'undefined' && rowFreemailAdminUsername) rowFreemailAdminUsername.style.display = showFreemailSettings ? '' : 'none';
   if (typeof rowFreemailAdminPassword !== 'undefined' && rowFreemailAdminPassword) rowFreemailAdminPassword.style.display = showFreemailSettings ? '' : 'none';
   if (typeof rowFreemailDomain !== 'undefined' && rowFreemailDomain) rowFreemailDomain.style.display = showFreemailDomain ? '' : 'none';
+  if (typeof moemailSection !== 'undefined' && moemailSection) {
+    moemailSection.style.display = showMoemailSettings ? '' : 'none';
+  }
+  if (typeof rowMoemailBaseUrl !== 'undefined' && rowMoemailBaseUrl) rowMoemailBaseUrl.style.display = showMoemailSettings ? '' : 'none';
+  if (typeof rowMoemailApiKey !== 'undefined' && rowMoemailApiKey) rowMoemailApiKey.style.display = showMoemailSettings ? '' : 'none';
+  if (typeof rowMoemailDomain !== 'undefined' && rowMoemailDomain) rowMoemailDomain.style.display = showMoemailDomain ? '' : 'none';
+  if (typeof yydsmailSection !== 'undefined' && yydsmailSection) {
+    yydsmailSection.style.display = showYydsMailSettings ? '' : 'none';
+  }
+  if (typeof rowYydsMailBaseUrl !== 'undefined' && rowYydsMailBaseUrl) rowYydsMailBaseUrl.style.display = showYydsMailSettings ? '' : 'none';
+  if (typeof rowYydsMailApiKey !== 'undefined' && rowYydsMailApiKey) rowYydsMailApiKey.style.display = showYydsMailSettings ? '' : 'none';
+  if (typeof rowYydsMailDomain !== 'undefined' && rowYydsMailDomain) rowYydsMailDomain.style.display = showYydsMailSettings ? '' : 'none';
   if (typeof outlookEmailPlusSection !== 'undefined' && outlookEmailPlusSection) {
     outlookEmailPlusSection.style.display = showOutlookEmailPlusSettings ? '' : 'none';
   }
@@ -14717,6 +14968,14 @@ async function fetchGeneratedEmail(options = {}) {
   if (!freemailValidation.valid) {
     throw new Error(freemailValidation.message);
   }
+  const moemailValidation = validateMoemailConfigForGeneration({ focusOnError: true });
+  if (!moemailValidation.valid) {
+    throw new Error(moemailValidation.message);
+  }
+  const yydsMailValidation = validateYydsMailConfigForGeneration({ focusOnError: true });
+  if (!yydsMailValidation.valid) {
+    throw new Error(yydsMailValidation.message);
+  }
   const defaultLabel = uiCopy.buttonLabel;
   btnFetchEmail.disabled = true;
   btnFetchEmail.textContent = '...';
@@ -14735,6 +14994,12 @@ async function fetchGeneratedEmail(options = {}) {
         freemailAdminUsername: String(inputFreemailAdminUsername?.value || '').trim(),
         freemailAdminPassword: inputFreemailAdminPassword?.value || '',
         freemailDomain: normalizeFreemailDomainValue(inputFreemailDomain?.value || ''),
+        moemailBaseUrl: normalizeMoemailBaseUrlValue(inputMoemailBaseUrl?.value || ''),
+        moemailApiKey: String(inputMoemailApiKey?.value || '').trim(),
+        moemailDomain: normalizeMoemailDomainValue(inputMoemailDomain?.value || ''),
+        yydsMailBaseUrl: normalizeYydsMailBaseUrlValue(inputYydsMailBaseUrl?.value || ''),
+        yydsMailApiKey: String(inputYydsMailApiKey?.value || '').trim(),
+        yydsMailDomain: normalizeYydsMailDomainValue(inputYydsMailDomain?.value || ''),
         ...(getSelectedEmailGenerator() === CUSTOM_EMAIL_POOL_GENERATOR
           ? {
               customEmailPool: getActiveCustomEmailPoolEmails(),
@@ -15987,6 +16252,14 @@ btnCloudflareTempEmailGithub?.addEventListener('click', () => {
 
 btnFreemailGithub?.addEventListener('click', () => {
   openExternalUrl(MAIL_PROVIDER_LOGIN_CONFIGS[FREEMAIL_PROVIDER]?.url || 'https://github.com/idinging/freemail');
+});
+
+btnMoemailDocs?.addEventListener('click', () => {
+  openExternalUrl(MAIL_PROVIDER_LOGIN_CONFIGS[MOEMAIL_PROVIDER]?.url || 'https://docs.moemail.app/api');
+});
+
+btnYydsMailDocs?.addEventListener('click', () => {
+  openExternalUrl(MAIL_PROVIDER_LOGIN_CONFIGS[YYDSMAIL_PROVIDER]?.url || 'https://vip.215.im/docs');
 });
 
 btnOutlookEmailPlusGithub?.addEventListener('click', () => {
@@ -19375,6 +19648,38 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         || message.payload.freemailAdminUsername !== undefined
         || message.payload.freemailAdminPassword !== undefined
         || message.payload.freemailDomain !== undefined
+      ) {
+        updateMailProviderUI();
+      }
+      if (message.payload.moemailBaseUrl !== undefined && inputMoemailBaseUrl) {
+        inputMoemailBaseUrl.value = message.payload.moemailBaseUrl || '';
+      }
+      if (message.payload.moemailApiKey !== undefined && inputMoemailApiKey) {
+        inputMoemailApiKey.value = message.payload.moemailApiKey || '';
+      }
+      if (message.payload.moemailDomain !== undefined && inputMoemailDomain) {
+        inputMoemailDomain.value = message.payload.moemailDomain || '';
+      }
+      if (
+        message.payload.moemailBaseUrl !== undefined
+        || message.payload.moemailApiKey !== undefined
+        || message.payload.moemailDomain !== undefined
+      ) {
+        updateMailProviderUI();
+      }
+      if (message.payload.yydsMailBaseUrl !== undefined && inputYydsMailBaseUrl) {
+        inputYydsMailBaseUrl.value = message.payload.yydsMailBaseUrl || '';
+      }
+      if (message.payload.yydsMailApiKey !== undefined && inputYydsMailApiKey) {
+        inputYydsMailApiKey.value = message.payload.yydsMailApiKey || '';
+      }
+      if (message.payload.yydsMailDomain !== undefined && inputYydsMailDomain) {
+        inputYydsMailDomain.value = message.payload.yydsMailDomain || '';
+      }
+      if (
+        message.payload.yydsMailBaseUrl !== undefined
+        || message.payload.yydsMailApiKey !== undefined
+        || message.payload.yydsMailDomain !== undefined
       ) {
         updateMailProviderUI();
       }

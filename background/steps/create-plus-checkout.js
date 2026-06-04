@@ -575,6 +575,61 @@
       throw new Error(`${PLUS_CHECKOUT_START_NEW_FLOW_ERROR_PREFIX}步骤 6：${contextLabel ? `${contextLabel}：` : ''}custom checkout 检测到错误提示框（${frameLabel}）：${message}`);
     }
 
+    function isRetryableCustomCheckoutEmailError(error) {
+      const message = String(error?.message || error || '').trim();
+      return /PLUS_CHECKOUT_START_NEW_FLOW::[\s\S]*(出错了，请重试|请重试|try\s+again|something\s+went\s+wrong)/i.test(message);
+    }
+
+    async function tryRecoverCustomCheckoutByRefillingEmail(tabId, registrationEmail = '', candidateFrames = [], paymentMethod = PLUS_PAYMENT_METHOD_PAYPAL) {
+      const normalizedEmail = String(registrationEmail || '').trim();
+      if (!normalizedEmail) {
+        return false;
+      }
+      await addLog('步骤 6：检测到提交后的短链错误提示，准备清空并重填顶层联系邮箱后重试订阅。', 'warn');
+      const refillResult = await sendFrameMessage(tabId, 0, {
+        type: 'PLUS_CHECKOUT_FILL_CONTACT_EMAIL',
+        source: 'background',
+        payload: {
+          email: normalizedEmail,
+          options: {
+            overwrite: true,
+            clearFirst: true,
+            forceRefill: true,
+            settleTimeoutMs: 4000,
+          },
+        },
+      }).catch(() => null);
+      if (refillResult?.error) {
+        throw new Error(refillResult.error);
+      }
+      if (refillResult?.emailFillResult) {
+        await addLog(`步骤 6：短链错误恢复后的顶层联系邮箱处理结果：${JSON.stringify({
+          contactEmail: refillResult?.contactEmail || normalizedEmail,
+          found: Boolean(refillResult.emailFillResult.found),
+          filled: Boolean(refillResult.emailFillResult.filled),
+          alreadyFilled: Boolean(refillResult.emailFillResult.alreadyFilled),
+          skipped: Boolean(refillResult.emailFillResult.skipped),
+          reason: String(refillResult.emailFillResult.reason || ''),
+          value: String(refillResult.emailFillResult.value || ''),
+        })}`, 'info');
+      }
+      await sleepWithStop(500);
+      const subscribeFrame = await waitForSubscribeFrame(tabId, candidateFrames);
+      const subscribeResult = await sendFrameMessage(tabId, subscribeFrame.frameId, {
+        type: 'PLUS_CHECKOUT_CLICK_SUBSCRIBE',
+        source: 'background',
+        payload: {
+          beforeClickDelayMs: 900,
+          paymentMethod,
+          autoCheckAgreement: true,
+        },
+      });
+      if (subscribeResult?.error) {
+        throw new Error(subscribeResult.error);
+      }
+      return true;
+    }
+
     function pickPaymentFrame(inspections = []) {
       return inspections.find((item) => item.result?.hasPayPal || item.result?.paypalCandidates?.length)
         || inspections.find((item) => isPaymentFrameUrl(item.frame.url))
@@ -3641,6 +3696,9 @@ function FindProxyForURL(url, host) {
 
     async function runHostedCheckoutCustomChatGptFlow(tabId, guestProfile = {}) {
       await addLog('步骤 6：检测到 ChatGPT custom checkout 页面，改用 iframe 账单流程进入 PayPal。', 'info');
+      const latestState = typeof getState === 'function'
+        ? await getState().catch(() => ({}))
+        : {};
       const topLevelState = await sendTabMessageUntilStopped(tabId, PLUS_CHECKOUT_SOURCE, {
         type: 'PLUS_CHECKOUT_GET_STATE',
         source: 'background',
@@ -3660,7 +3718,12 @@ function FindProxyForURL(url, host) {
         throw new Error(`PLUS_CHECKOUT_NON_FREE_TRIAL::步骤 6：检测到今日应付金额不是 0（${amountLabel}），当前账号没有免费试用资格，已自动停止整个流程。`);
       }
 
-      const registrationEmail = String(guestProfile?.email || '').trim();
+      const registrationEmail = String(
+        latestState?.email
+        || latestState?.registrationEmailState?.current
+        || guestProfile?.email
+        || ''
+      ).trim();
       const addressSeed = buildHostedCheckoutAddressSeed(guestProfile?.address || {});
       if (!addressSeed) {
         throw new Error('步骤 6：custom checkout 缺少完整地址，无法自动填写 PayPal 账单信息。');
@@ -3719,6 +3782,7 @@ function FindProxyForURL(url, host) {
           email: registrationEmail,
           phone: String(guestProfile?.phone || '').trim(),
           addressSeed,
+          skipContactEmailFill: true,
           autoCheckAgreement: true,
         },
       });
@@ -3730,7 +3794,30 @@ function FindProxyForURL(url, host) {
         { frameId: paymentFrame.frame.frameId, url: paymentFrame.frame.url || '' },
         { frameId: activeBillingFrame.frameId, url: activeBillingFrame.frameUrl || '' },
       ], '填写账单信息后');
-      if (fillResult?.emailFillResult) {
+      if (registrationEmail) {
+        const topLevelEmailResult = await sendFrameMessage(tabId, 0, {
+          type: 'PLUS_CHECKOUT_FILL_CONTACT_EMAIL',
+          source: 'background',
+          payload: {
+            email: registrationEmail,
+          },
+        }).catch(() => null);
+        if (topLevelEmailResult?.error) {
+          throw new Error(topLevelEmailResult.error);
+        }
+        if (topLevelEmailResult?.emailFillResult) {
+          await addLog(`步骤 6：custom checkout 顶层联系邮箱处理结果：${JSON.stringify({
+            contactEmail: topLevelEmailResult?.contactEmail || registrationEmail || '',
+            found: Boolean(topLevelEmailResult.emailFillResult.found),
+            filled: Boolean(topLevelEmailResult.emailFillResult.filled),
+            alreadyFilled: Boolean(topLevelEmailResult.emailFillResult.alreadyFilled),
+            skipped: Boolean(topLevelEmailResult.emailFillResult.skipped),
+            reason: String(topLevelEmailResult.emailFillResult.reason || ''),
+            value: String(topLevelEmailResult.emailFillResult.value || ''),
+          })}`, 'info');
+        }
+      }
+      if (fillResult?.emailFillResult && fillResult.emailFillResult.reason !== 'skipped_by_payload') {
         await addLog(`步骤 6：custom checkout 联系邮箱处理结果：${JSON.stringify({
           contactEmail: fillResult?.contactEmail || registrationEmail || '',
           found: Boolean(fillResult.emailFillResult.found),
@@ -3771,15 +3858,39 @@ function FindProxyForURL(url, host) {
           await addLog(`步骤 6：点击订阅失败（${attempt}/${HOSTED_CHECKOUT_CUSTOM_SUBMIT_MAX_ATTEMPTS}）：${lastSubmitError}`, 'warn');
           continue;
         }
-        await assertNoCustomCheckoutError(tabId, [
+        const recoveryFrames = [
           { frameId: 0, url: '' },
           { frameId: paymentFrame.frame.frameId, url: paymentFrame.frame.url || '' },
           { frameId: activeBillingFrame.frameId, url: activeBillingFrame.frameUrl || '' },
           { frameId: subscribeFrame.frameId, url: subscribeFrame.url || '' },
-        ], '点击订阅后');
+        ];
+        let recoveredFromEmailError = false;
+        try {
+          await assertNoCustomCheckoutError(tabId, recoveryFrames, '点击订阅后');
+        } catch (error) {
+          if (isRetryableCustomCheckoutEmailError(error) && await tryRecoverCustomCheckoutByRefillingEmail(tabId, registrationEmail, recoveryFrames, PLUS_PAYMENT_METHOD_PAYPAL)) {
+            recoveredFromEmailError = true;
+          } else {
+            throw error;
+          }
+        }
 
-        await addLog(`步骤 6：已点击订阅，正在等待跳转到 PayPal（${attempt}/${HOSTED_CHECKOUT_CUSTOM_SUBMIT_MAX_ATTEMPTS}）...`, 'info');
-        redirectedTab = await waitForCustomCheckoutPayPalRedirect(tabId);
+        await addLog(
+          recoveredFromEmailError
+            ? `步骤 6：邮箱已清空并重填，正在重新等待跳转到 PayPal（${attempt}/${HOSTED_CHECKOUT_CUSTOM_SUBMIT_MAX_ATTEMPTS}）...`
+            : `步骤 6：已点击订阅，正在等待跳转到 PayPal（${attempt}/${HOSTED_CHECKOUT_CUSTOM_SUBMIT_MAX_ATTEMPTS}）...`,
+          recoveredFromEmailError ? 'warn' : 'info'
+        );
+        try {
+          redirectedTab = await waitForCustomCheckoutPayPalRedirect(tabId);
+        } catch (error) {
+          if (isRetryableCustomCheckoutEmailError(error) && await tryRecoverCustomCheckoutByRefillingEmail(tabId, registrationEmail, recoveryFrames, PLUS_PAYMENT_METHOD_PAYPAL)) {
+            await addLog(`步骤 6：邮箱已清空并重填，正在再次等待跳转到 PayPal（${attempt}/${HOSTED_CHECKOUT_CUSTOM_SUBMIT_MAX_ATTEMPTS}）...`, 'warn');
+            redirectedTab = await waitForCustomCheckoutPayPalRedirect(tabId);
+          } else {
+            throw error;
+          }
+        }
         if (redirectedTab) {
           break;
         }

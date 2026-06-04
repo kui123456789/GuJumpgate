@@ -70,10 +70,14 @@ importScripts(
   'cloudflare-temp-email-utils.js',
   'cloudmail-utils.js',
   'freemail-utils.js',
+  'moemail-utils.js',
+  'yydsmail-utils.js',
   'outlook-email-plus-utils.js',
   'background/freemail-provider.js',
   'background/outlook-email-plus-provider.js',
   'background/cloudmail-provider.js',
+  'background/moemail-provider.js',
+  'background/yydsmail-provider.js',
   'icloud-utils.js',
   'mail-provider-utils.js',
   'content/activation-utils.js'
@@ -349,6 +353,30 @@ const {
   normalizeFreemailMessages,
 } = self.FreemailUtils;
 const {
+  DEFAULT_MAIL_PAGE_SIZE: MOEMAIL_DEFAULT_PAGE_SIZE,
+  buildMoemailHeaders,
+  getMoemailAddressFromResponse,
+  getMoemailEmailIdFromResponse,
+  getMoemailNextCursor,
+  joinMoemailUrl,
+  normalizeMoemailAddress,
+  normalizeMoemailBaseUrl,
+  normalizeMoemailDomain,
+  normalizeMoemailDomains,
+  normalizeMoemailMailboxes,
+  normalizeMoemailMessages,
+} = self.MoemailUtils;
+const {
+  DEFAULT_MESSAGE_LIMIT: YYDSMAIL_DEFAULT_MESSAGE_LIMIT,
+  buildYydsMailHeaders,
+  getYydsMailAddressFromResponse,
+  joinYydsMailUrl,
+  normalizeYydsMailAddress,
+  normalizeYydsMailBaseUrl,
+  normalizeYydsMailDomain,
+  normalizeYydsMailMessages,
+} = self.YydsMailUtils;
+const {
   DEFAULT_OUTLOOK_EMAIL_PLUS_BASE_URL,
   buildOutlookEmailPlusAliasAddress,
   buildOutlookEmailPlusHeaders,
@@ -529,6 +557,10 @@ const CLOUD_MAIL_PROVIDER = 'cloudmail';
 const CLOUD_MAIL_GENERATOR = 'cloudmail';
 const FREEMAIL_PROVIDER = 'freemail';
 const FREEMAIL_GENERATOR = 'freemail';
+const MOEMAIL_PROVIDER = 'moemail';
+const MOEMAIL_GENERATOR = 'moemail';
+const YYDSMAIL_PROVIDER = 'yydsmail';
+const YYDSMAIL_GENERATOR = 'yydsmail';
 const OUTLOOK_EMAIL_PLUS_PROVIDER = 'outlook-email-plus';
 const OUTLOOK_EMAIL_PLUS_GENERATOR = 'outlook-email-plus';
 const CUSTOM_EMAIL_POOL_GENERATOR = 'custom-pool';
@@ -1251,6 +1283,14 @@ const PERSISTED_SETTING_DEFAULTS = {
   freemailAdminPassword: '',
   freemailDomain: '',
   freemailDomains: [],
+  moemailBaseUrl: '',
+  moemailApiKey: '',
+  moemailDomain: '',
+  moemailDomains: [],
+  moemailEmailId: '',
+  yydsMailBaseUrl: '',
+  yydsMailApiKey: '',
+  yydsMailDomain: '',
   outlookEmailPlusBaseUrl: DEFAULT_OUTLOOK_EMAIL_PLUS_BASE_URL,
   outlookEmailPlusApiKey: '',
   outlookEmailPlusProvider: 'outlook',
@@ -2795,6 +2835,8 @@ function normalizeEmailGenerator(value = '') {
   if (normalized === CLOUDFLARE_TEMP_EMAIL_GENERATOR) return CLOUDFLARE_TEMP_EMAIL_GENERATOR;
   if (normalized === CLOUD_MAIL_GENERATOR) return CLOUD_MAIL_GENERATOR;
   if (normalized === FREEMAIL_GENERATOR) return FREEMAIL_GENERATOR;
+  if (normalized === MOEMAIL_GENERATOR) return MOEMAIL_GENERATOR;
+  if (normalized === YYDSMAIL_GENERATOR) return YYDSMAIL_GENERATOR;
   if (normalized === OUTLOOK_EMAIL_PLUS_GENERATOR) return OUTLOOK_EMAIL_PLUS_GENERATOR;
   return 'duck';
 }
@@ -3300,6 +3342,8 @@ function normalizeMailProvider(value = '') {
     case CLOUDFLARE_TEMP_EMAIL_PROVIDER:
     case CLOUD_MAIL_PROVIDER:
     case FREEMAIL_PROVIDER:
+    case MOEMAIL_PROVIDER:
+    case YYDSMAIL_PROVIDER:
     case OUTLOOK_EMAIL_PLUS_PROVIDER:
     case '163':
     case '163-vip':
@@ -3567,6 +3611,65 @@ const {
   pollFreemailVerificationCode,
   resolveFreemailPollTargetEmail,
 } = freemailProvider;
+const moemailProvider = self.MultiPageBackgroundMoemailProvider.createMoemailProvider({
+  addLog,
+  buildMoemailHeaders,
+  DEFAULT_MAIL_PAGE_SIZE: MOEMAIL_DEFAULT_PAGE_SIZE,
+  fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  getMoemailAddressFromResponse,
+  getMoemailEmailIdFromResponse,
+  getMoemailNextCursor,
+  getState,
+  joinMoemailUrl,
+  MOEMAIL_GENERATOR,
+  MOEMAIL_PROVIDER,
+  normalizeMoemailAddress,
+  normalizeMoemailBaseUrl,
+  normalizeMoemailDomain,
+  normalizeMoemailDomains,
+  normalizeMoemailMailboxes,
+  normalizeMoemailMessages,
+  persistRegistrationEmailState,
+  pickVerificationMessageWithTimeFallback,
+  setEmailState,
+  setPersistentSettings,
+  setState,
+  sleepWithStop,
+  throwIfStopped,
+});
+const {
+  getMoemailConfig,
+  fetchMoemailAddress,
+  pollMoemailVerificationCode,
+  resolveMoemailEmailId,
+  resolveMoemailPollTargetEmail,
+} = moemailProvider;
+const yydsMailProvider = self.MultiPageBackgroundYydsMailProvider.createYydsMailProvider({
+  addLog,
+  buildYydsMailHeaders,
+  DEFAULT_MESSAGE_LIMIT: YYDSMAIL_DEFAULT_MESSAGE_LIMIT,
+  fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  getState,
+  getYydsMailAddressFromResponse,
+  joinYydsMailUrl,
+  normalizeYydsMailAddress,
+  normalizeYydsMailBaseUrl,
+  normalizeYydsMailDomain,
+  normalizeYydsMailMessages,
+  persistRegistrationEmailState,
+  pickVerificationMessageWithTimeFallback,
+  setEmailState,
+  sleepWithStop,
+  throwIfStopped,
+  YYDSMAIL_GENERATOR,
+  YYDSMAIL_PROVIDER,
+});
+const {
+  getYydsMailConfig,
+  fetchYydsMailAddress,
+  pollYydsMailVerificationCode,
+  resolveYydsMailPollTargetEmail,
+} = yydsMailProvider;
 const outlookEmailPlusProvider = self.MultiPageBackgroundOutlookEmailPlusProvider.createOutlookEmailPlusProvider({
   addLog,
   broadcastDataUpdate,
@@ -4066,6 +4169,12 @@ function normalizePersistentSettingValue(key, value) {
         if (normalizedMailProvider === FREEMAIL_PROVIDER) {
           return FREEMAIL_PROVIDER;
         }
+        if (normalizedMailProvider === MOEMAIL_PROVIDER) {
+          return MOEMAIL_PROVIDER;
+        }
+        if (normalizedMailProvider === YYDSMAIL_PROVIDER) {
+          return YYDSMAIL_PROVIDER;
+        }
         if (normalizedMailProvider === ICLOUD_PROVIDER || normalizedMailProvider === ICLOUD_API_PROVIDER) {
           return normalizedMailProvider;
         }
@@ -4173,6 +4282,22 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeFreemailDomain(value);
     case 'freemailDomains':
       return normalizeFreemailDomains(value);
+    case 'moemailBaseUrl':
+      return normalizeMoemailBaseUrl(value);
+    case 'moemailApiKey':
+      return String(value || '').trim();
+    case 'moemailDomain':
+      return normalizeMoemailDomain(value);
+    case 'moemailDomains':
+      return normalizeMoemailDomains(value);
+    case 'moemailEmailId':
+      return String(value || '').trim();
+    case 'yydsMailBaseUrl':
+      return normalizeYydsMailBaseUrl(value);
+    case 'yydsMailApiKey':
+      return String(value || '').trim();
+    case 'yydsMailDomain':
+      return normalizeYydsMailDomain(value);
     case 'outlookEmailPlusBaseUrl':
       return normalizeOutlookEmailPlusBaseUrl(value);
     case 'outlookEmailPlusApiKey':
@@ -4429,6 +4554,13 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
       domains.unshift(payload.cloudMailDomain);
     }
     payload.cloudMailDomains = domains;
+  }
+  if (payload.moemailDomains) {
+    const domains = normalizeMoemailDomains(payload.moemailDomains);
+    if (payload.moemailDomain && !domains.includes(payload.moemailDomain)) {
+      domains.unshift(payload.moemailDomain);
+    }
+    payload.moemailDomains = domains;
   }
   if (
     Object.prototype.hasOwnProperty.call(payload, 'sub2apiGroupName')
@@ -4774,6 +4906,20 @@ async function setEmailStateSilently(email, options = {}) {
         source: options?.source || '',
       });
   const normalizedEmail = updates.email;
+  const currentEmail = String(currentState?.email || '').trim() || null;
+  const currentMailProvider = String(currentState?.mailProvider || '').trim().toLowerCase();
+
+  if (options?.moemailEmailId !== undefined) {
+    updates.moemailEmailId = String(options.moemailEmailId || '').trim();
+  } else if (
+    currentMailProvider === MOEMAIL_PROVIDER
+    && String(normalizedEmail || '') !== String(currentEmail || '')
+  ) {
+    updates.moemailEmailId = '';
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'moemailEmailId')) {
+    await setPersistentSettings({ moemailEmailId: String(updates.moemailEmailId || '').trim() });
+  }
 
   if (!preserveAccountIdentity && normalizedEmail) {
     updates.accountIdentifierType = 'email';
@@ -13756,6 +13902,12 @@ async function fetchGeneratedEmail(state, options = {}) {
     freemailAdminUsername: options.freemailAdminUsername ?? currentState.freemailAdminUsername,
     freemailAdminPassword: options.freemailAdminPassword ?? currentState.freemailAdminPassword,
     freemailDomain: options.freemailDomain ?? currentState.freemailDomain,
+    moemailBaseUrl: options.moemailBaseUrl ?? currentState.moemailBaseUrl,
+    moemailApiKey: options.moemailApiKey ?? currentState.moemailApiKey,
+    moemailDomain: options.moemailDomain ?? currentState.moemailDomain,
+    yydsMailBaseUrl: options.yydsMailBaseUrl ?? currentState.yydsMailBaseUrl,
+    yydsMailApiKey: options.yydsMailApiKey ?? currentState.yydsMailApiKey,
+    yydsMailDomain: options.yydsMailDomain ?? currentState.yydsMailDomain,
   };
   const generator = normalizeEmailGenerator(options.generator ?? currentState.emailGenerator);
   if (generator === OUTLOOK_EMAIL_PLUS_GENERATOR) {
@@ -13766,6 +13918,12 @@ async function fetchGeneratedEmail(state, options = {}) {
   }
   if (generator === FREEMAIL_GENERATOR) {
     return fetchFreemailAddress(mergedState, options);
+  }
+  if (generator === MOEMAIL_GENERATOR) {
+    return fetchMoemailAddress(mergedState, options);
+  }
+  if (generator === YYDSMAIL_GENERATOR) {
+    return fetchYydsMailAddress(mergedState, options);
   }
   return generatedEmailHelpers.fetchGeneratedEmail(state, options);
 }
@@ -15438,6 +15596,8 @@ const verificationFlowHelpers = self.MultiPageBackgroundVerificationFlow?.create
   CLOUD_MAIL_PROVIDER,
   FREEMAIL_PROVIDER,
   ICLOUD_API_PROVIDER,
+  MOEMAIL_PROVIDER,
+  YYDSMAIL_PROVIDER,
   OUTLOOK_EMAIL_PLUS_PROVIDER,
   completeNodeFromBackground,
   confirmCustomVerificationStepBypassRequest: (step) => chrome.runtime.sendMessage({
@@ -15461,6 +15621,8 @@ const verificationFlowHelpers = self.MultiPageBackgroundVerificationFlow?.create
   pollCloudMailVerificationCode,
   pollFreemailVerificationCode,
   pollIcloudApiVerificationCode,
+  pollMoemailVerificationCode,
+  pollYydsMailVerificationCode,
   pollOutlookEmailPlusVerificationCode,
   pollHotmailVerificationCode,
   pollLuckmailVerificationCode,
@@ -15606,6 +15768,8 @@ const step4Executor = self.MultiPageBackgroundStep4?.createStep4Executor({
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
   CLOUD_MAIL_PROVIDER,
   FREEMAIL_PROVIDER,
+  MOEMAIL_PROVIDER,
+  YYDSMAIL_PROVIDER,
   resolveVerificationStep: verificationFlowHelpers.resolveVerificationStep,
   reuseOrCreateTab,
   sendToContentScript,
@@ -15665,6 +15829,8 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
   CLOUDFLARE_TEMP_EMAIL_PROVIDER,
   CLOUD_MAIL_PROVIDER,
   FREEMAIL_PROVIDER,
+  MOEMAIL_PROVIDER,
+  YYDSMAIL_PROVIDER,
   completeNodeFromBackground,
   confirmCustomVerificationStepBypass: verificationFlowHelpers.confirmCustomVerificationStepBypass,
   ensureMail2925MailboxSession,
@@ -16302,6 +16468,12 @@ function getMailConfig(state) {
   }
   if (provider === FREEMAIL_PROVIDER) {
     return { provider: FREEMAIL_PROVIDER, label: 'freemail' };
+  }
+  if (provider === MOEMAIL_PROVIDER) {
+    return { provider: MOEMAIL_PROVIDER, label: 'MoeMail' };
+  }
+  if (provider === YYDSMAIL_PROVIDER) {
+    return { provider: YYDSMAIL_PROVIDER, label: 'YYDS Mail' };
   }
   if (provider === OUTLOOK_EMAIL_PLUS_PROVIDER) {
     return { provider: OUTLOOK_EMAIL_PLUS_PROVIDER, label: 'Outlook Email Plus' };
