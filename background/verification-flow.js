@@ -14,6 +14,8 @@
       CLOUD_MAIL_PROVIDER = 'cloudmail',
       FREEMAIL_PROVIDER = 'freemail',
       ICLOUD_API_PROVIDER = 'icloud-api',
+      MOEMAIL_PROVIDER = 'moemail',
+      YYDSMAIL_PROVIDER = 'yydsmail',
       OUTLOOK_EMAIL_PLUS_PROVIDER = 'outlook-email-plus',
       completeNodeFromBackground,
       confirmCustomVerificationStepBypassRequest,
@@ -33,6 +35,8 @@
       pollCloudMailVerificationCode,
       pollFreemailVerificationCode,
       pollIcloudApiVerificationCode,
+      pollMoemailVerificationCode,
+      pollYydsMailVerificationCode,
       pollOutlookEmailPlusVerificationCode,
       pollHotmailVerificationCode,
       pollLuckmailVerificationCode,
@@ -1023,6 +1027,20 @@
           ...cleanPollOverrides,
         }, cleanPollOverrides, `轮询${getVerificationCodeLabel(step)}验证码邮箱`);
         return pollFreemailVerificationCode(step, state, timedPoll.payload);
+      }
+      if (mail.provider === MOEMAIL_PROVIDER) {
+        const timedPoll = await applyMailPollingTimeBudget(step, {
+          ...getVerificationPollPayload(step, state),
+          ...cleanPollOverrides,
+        }, cleanPollOverrides, `轮询${getVerificationCodeLabel(step)}验证码邮箱`);
+        return pollMoemailVerificationCode(step, state, timedPoll.payload);
+      }
+      if (mail.provider === YYDSMAIL_PROVIDER) {
+        const timedPoll = await applyMailPollingTimeBudget(step, {
+          ...getVerificationPollPayload(step, state),
+          ...cleanPollOverrides,
+        }, cleanPollOverrides, `轮询${getVerificationCodeLabel(step)}验证码邮箱`);
+        return pollYydsMailVerificationCode(step, state, timedPoll.payload);
       }
       if (mail.provider === ICLOUD_API_PROVIDER) {
         const timedPoll = await applyMailPollingTimeBudget(step, {
