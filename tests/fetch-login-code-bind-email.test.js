@@ -177,6 +177,69 @@ test('bound-email login code uses stable boundEmail after transient verification
   assert.equal(stateUpdates[0].step8VerificationTargetEmail, '');
 });
 
+test('login code step uses custom email verification URL before manual confirmation', async () => {
+  const step8Module = loadStep8Module();
+  const customCalls = [];
+  const stateUpdates = [];
+  let manualConfirmationCalled = false;
+  const currentState = {
+    nodeId: 'fetch-login-code',
+    oauthUrl: 'https://auth.openai.com/oauth/authorize?client_id=test',
+    email: 'alias@example.com',
+    emailGenerator: 'custom-pool',
+    customEmailPoolEntries: [{
+      email: 'alias@example.com',
+      verificationUrl: 'https://example.test/code',
+    }],
+    loginVerificationRequestedAt: 0,
+  };
+
+  const executor = step8Module.createStep8Executor({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypass: async () => {
+      manualConfirmationCalled = true;
+      throw new Error('manual confirmation should not be requested');
+    },
+    ensureStep8VerificationPageReady: async () => ({
+      state: 'verification_page',
+      displayedEmail: 'alias@example.com',
+      url: 'https://auth.openai.com/u/login/email-verification',
+    }),
+    getMailConfig: () => {
+      throw new Error('mail config should not be required for custom URL verification');
+    },
+    getOAuthFlowStepTimeoutMs: async (fallbackMs) => fallbackMs,
+    getState: async () => currentState,
+    getTabId: async () => 123,
+    isVerificationMailPollingError: () => false,
+    resolveCustomEmailVerificationStep: async (step, preparedState, options = {}) => {
+      customCalls.push({ step, preparedState, options });
+      return { handled: true, code: '345678' };
+    },
+    setState: async (updates) => {
+      stateUpdates.push(updates);
+    },
+    shouldUseCustomRegistrationEmail: () => true,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep8(currentState);
+
+  assert.equal(manualConfirmationCalled, false);
+  assert.equal(customCalls.length, 1);
+  assert.equal(customCalls[0].step, 8);
+  assert.equal(customCalls[0].preparedState.step8VerificationTargetEmail, 'alias@example.com');
+  assert.equal(customCalls[0].options.completionStep, 8);
+  assert.equal(customCalls[0].options.targetEmail, 'alias@example.com');
+  assert.equal(stateUpdates[0].step8VerificationTargetEmail, 'alias@example.com');
+});
+
 test('login code step treats Outlook Email Plus as API polling mail provider', async () => {
   const step8Module = loadStep8Module();
   const logs = [];

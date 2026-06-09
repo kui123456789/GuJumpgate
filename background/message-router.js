@@ -357,6 +357,16 @@
     }
 
     function normalizePlusPaymentMethod(value = '') {
+      const normalized = normalizeString(value).toLowerCase();
+      if (normalized === 'gopay') {
+        return 'gopay';
+      }
+      if (normalized === 'gpc-helper') {
+        return 'gpc-helper';
+      }
+      if (normalized === 'pix') {
+        return 'pix';
+      }
       return 'paypal';
     }
 
@@ -911,6 +921,16 @@
     }
 
     function normalizePlusPaymentMethodForDisplay(value = '') {
+      const normalized = normalizeString(value).toLowerCase();
+      if (normalized === 'gopay') {
+        return 'gopay';
+      }
+      if (normalized === 'gpc-helper') {
+        return 'gpc-helper';
+      }
+      if (normalized === 'pix') {
+        return 'pix';
+      }
       return 'paypal';
     }
 
@@ -918,6 +938,9 @@
       const method = normalizePlusPaymentMethodForDisplay(value);
       if (method === 'gpc-helper') {
         return 'GPC';
+      }
+      if (method === 'pix') {
+        return 'Pix';
       }
       return method === 'gopay' ? 'GoPay' : 'PayPal';
     }

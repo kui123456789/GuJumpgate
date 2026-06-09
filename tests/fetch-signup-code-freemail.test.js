@@ -76,3 +76,56 @@ test('signup code step treats freemail as API polling mail provider', async () =
   assert.equal(verificationCalls[0].options.requestFreshCodeFirst, false);
   assert.ok(logs.some((message) => message.includes('正在通过 freemail 轮询验证码')));
 });
+
+test('signup code step uses custom email verification URL before manual confirmation', async () => {
+  const step4Module = loadStep4Module();
+  const customCalls = [];
+  let manualConfirmationCalled = false;
+
+  const executor = step4Module.createStep4Executor({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypass: async () => {
+      manualConfirmationCalled = true;
+      throw new Error('manual confirmation should not be requested');
+    },
+    generateRandomBirthday: () => ({ year: 1995, month: 6, day: 9 }),
+    generateRandomName: () => ({ firstName: 'Ada', lastName: 'Lovelace' }),
+    getMailConfig: () => {
+      throw new Error('mail config should not be required for custom URL verification');
+    },
+    getTabId: async () => 123,
+    resolveCustomEmailVerificationStep: async (step, state, options = {}) => {
+      customCalls.push({ step, state, options });
+      return { handled: true, code: '654321' };
+    },
+    shouldUseCustomRegistrationEmail: () => true,
+    sendToContentScript: async () => ({
+      alreadyVerified: false,
+    }),
+    resolveSignupMethod: () => 'email',
+    throwIfStopped: () => {},
+    waitForTabStableComplete: async () => {},
+  });
+
+  await executor.executeStep4({
+    nodeId: 'fetch-signup-code',
+    email: 'alias@example.com',
+    emailGenerator: 'custom-pool',
+    customEmailPoolEntries: [{
+      email: 'alias@example.com',
+      verificationUrl: 'https://example.test/code',
+    }],
+  });
+
+  assert.equal(manualConfirmationCalled, false);
+  assert.equal(customCalls.length, 1);
+  assert.equal(customCalls[0].step, 4);
+  assert.equal(customCalls[0].state.email, 'alias@example.com');
+  assert.equal(customCalls[0].options.signupProfile.firstName, 'Ada');
+});

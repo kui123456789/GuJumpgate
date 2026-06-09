@@ -25,6 +25,7 @@
       MOEMAIL_PROVIDER = 'moemail',
       YYDSMAIL_PROVIDER = 'yydsmail',
       OUTLOOK_EMAIL_PLUS_PROVIDER = 'outlook-email-plus',
+      resolveCustomEmailVerificationStep = null,
       resolveVerificationStep,
       reuseOrCreateTab,
       sendToContentScript,
@@ -98,7 +99,16 @@
     }
 
     async function executeSignupEmailVerificationStep(state, stepStartedAt, verificationSessionKey) {
+      const signupProfile = buildSignupProfileForVerificationStep();
       if (shouldUseCustomRegistrationEmail(state)) {
+        if (typeof resolveCustomEmailVerificationStep === 'function') {
+          const customResult = await resolveCustomEmailVerificationStep(4, state, {
+            signupProfile,
+          });
+          if (customResult?.handled) {
+            return customResult;
+          }
+        }
         await confirmCustomVerificationStepBypass(4);
         return;
       }
@@ -162,8 +172,6 @@
         YYDSMAIL_PROVIDER,
         OUTLOOK_EMAIL_PLUS_PROVIDER,
       ].includes(mail.provider);
-      const signupProfile = buildSignupProfileForVerificationStep();
-
       await resolveVerificationStep(4, state, mail, {
         filterAfterTimestamp: verificationFilterAfterTimestamp,
         sessionKey: verificationSessionKey,

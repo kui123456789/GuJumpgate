@@ -28,6 +28,7 @@
       isTabAlive,
       isVerificationMailPollingError,
       LUCKMAIL_PROVIDER,
+      resolveCustomEmailVerificationStep = null,
       resolveSignupEmailForFlow,
       resolveVerificationStep,
       rerunStep7ForStep8Recovery,
@@ -569,20 +570,53 @@
       const notifyResendRequestedAt = typeof runtime?.onResendRequestedAt === 'function'
         ? runtime.onResendRequestedAt
         : null;
+      const stepStartedAt = Date.now();
+      const verificationSessionKey = `${visibleStep}:${stepStartedAt}`;
+      const rawDisplayedVerificationEmail = normalizeStep8VerificationTargetEmail(pageState?.displayedEmail);
+      const rawFixedTargetEmail = rawDisplayedVerificationEmail
+        || normalizeStep8VerificationTargetEmail(preparedState?.step8VerificationTargetEmail || preparedState?.email);
+
+      if (shouldUseCustomRegistrationEmail(preparedState)) {
+        await setState({
+          step8VerificationTargetEmail: rawDisplayedVerificationEmail || '',
+        });
+        await addLog(`步骤 ${visibleStep}：邮箱验证码页面已就绪，开始获取验证码。`, 'info');
+        if (rawDisplayedVerificationEmail) {
+          await addLog(`步骤 ${visibleStep}：已固定当前验证码页显示邮箱 ${rawDisplayedVerificationEmail} 作为后续匹配目标。`, 'info');
+        }
+        if (typeof resolveCustomEmailVerificationStep === 'function') {
+          const customResult = await resolveCustomEmailVerificationStep(8, {
+            ...preparedState,
+            step8VerificationTargetEmail: rawDisplayedVerificationEmail || '',
+          }, {
+            completionStep: visibleStep,
+            promptStep: visibleStep,
+            targetEmail: rawFixedTargetEmail,
+            getRemainingTimeMs: getStep8RemainingTimeResolver(preparedState?.oauthUrl || '', visibleStep),
+          });
+          if (customResult?.handled) {
+            return {
+              lastResendAt: latestResendAt,
+              phoneVerificationRequired: Boolean(customResult.phoneVerificationRequired),
+              url: customResult.url || '',
+            };
+          }
+        }
+        await confirmCustomVerificationStepBypass(8, {
+          completionStep: visibleStep,
+          promptStep: visibleStep,
+        });
+        return { lastResendAt: latestResendAt };
+      }
+
       const mail = getMailConfig(preparedState);
       if (mail.error) throw new Error(mail.error);
-      const stepStartedAt = Date.now();
       const verificationFilterAfterTimestamp = mail.provider === '2925'
         ? Math.max(0, stepStartedAt - MAIL_2925_FILTER_LOOKBACK_MS)
         : stepStartedAt;
-      const verificationSessionKey = `${visibleStep}:${stepStartedAt}`;
       const shouldCompareVerificationEmail = mail.provider !== '2925';
-      const displayedVerificationEmail = shouldCompareVerificationEmail
-        ? normalizeStep8VerificationTargetEmail(pageState?.displayedEmail)
-        : '';
-      const fixedTargetEmail = shouldCompareVerificationEmail
-        ? (displayedVerificationEmail || normalizeStep8VerificationTargetEmail(preparedState?.step8VerificationTargetEmail || preparedState?.email))
-        : '';
+      const displayedVerificationEmail = shouldCompareVerificationEmail ? rawDisplayedVerificationEmail : '';
+      const fixedTargetEmail = shouldCompareVerificationEmail ? rawFixedTargetEmail : '';
 
       await setState({
         step8VerificationTargetEmail: displayedVerificationEmail || '',
@@ -591,14 +625,6 @@
       await addLog(`步骤 ${visibleStep}：邮箱验证码页面已就绪，开始获取验证码。`, 'info');
       if (shouldCompareVerificationEmail && displayedVerificationEmail) {
         await addLog(`步骤 ${visibleStep}：已固定当前验证码页显示邮箱 ${displayedVerificationEmail} 作为后续匹配目标。`, 'info');
-      }
-
-      if (shouldUseCustomRegistrationEmail(preparedState)) {
-        await confirmCustomVerificationStepBypass(8, {
-          completionStep: visibleStep,
-          promptStep: visibleStep,
-        });
-        return { lastResendAt: latestResendAt };
       }
 
       if (mail.source === 'icloud-mail' && typeof ensureIcloudMailSession === 'function') {

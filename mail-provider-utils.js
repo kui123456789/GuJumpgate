@@ -60,6 +60,32 @@
     };
   }
 
+  function normalizeCustomEmailVerificationUrl(value = '') {
+    const raw = String(value || '').trim();
+    if (!/^https?:\/\//i.test(raw)) {
+      return '';
+    }
+    try {
+      const parsed = new URL(raw);
+      return /^https?:$/i.test(parsed.protocol) ? parsed.toString() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function parseCustomEmailPoolEntryValue(value = '') {
+    const raw = String(value || '').trim();
+    const separatorIndex = raw.indexOf('----');
+    const emailSource = separatorIndex >= 0 ? raw.slice(0, separatorIndex) : raw;
+    const suffix = separatorIndex >= 0 ? raw.slice(separatorIndex + 4).trim() : '';
+    const verificationUrl = normalizeCustomEmailVerificationUrl(suffix);
+    return {
+      email: emailSource.trim().toLowerCase(),
+      credential: separatorIndex >= 0 && !verificationUrl ? raw : '',
+      verificationUrl,
+    };
+  }
+
   function normalizeIcloudTargetMailboxType(value = '') {
     return String(value || '').trim().toLowerCase() === ICLOUD_TARGET_MAILBOX_TYPE_FORWARD
       ? ICLOUD_TARGET_MAILBOX_TYPE_FORWARD
@@ -204,6 +230,8 @@
     normalizeIcloudForwardMailProvider,
     normalizeIcloudTargetMailboxType,
     normalizeMailProvider,
+    normalizeCustomEmailVerificationUrl,
+    parseCustomEmailPoolEntryValue,
     parseHiddenEmailCredential,
   };
 });

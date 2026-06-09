@@ -7,6 +7,7 @@ const rootDir = path.resolve(__dirname, '..');
 const sidepanelJs = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.js'), 'utf8');
 const sidepanelHtml = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.html'), 'utf8');
 const sidepanelCss = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.css'), 'utf8');
+const customEmailPoolManagerJs = fs.readFileSync(path.join(rootDir, 'sidepanel', 'custom-email-pool-manager.js'), 'utf8');
 
 test('sidepanel exposes hosted SMS provider controls', () => {
   assert.match(
@@ -61,6 +62,64 @@ test('sidepanel exposes hosted SMS provider controls', () => {
   );
 });
 
+test('sidepanel exposes selectable Plus payment methods', () => {
+  const selectMatch = sidepanelHtml.match(/<select[^>]+id="select-plus-payment-method"[^>]*>[\s\S]*?<\/select>/);
+  assert.ok(selectMatch, '应能找到 Plus 支付方式下拉框');
+
+  const selectHtml = selectMatch[0];
+  assert.doesNotMatch(selectHtml, /\sdisabled(?:\s|>|=)/, 'Plus 支付方式下拉框不能被禁用');
+  assert.match(selectHtml, /<option\s+value="paypal">PayPal<\/option>/, '应保留 PayPal 选项');
+  assert.match(selectHtml, /<option\s+value="gopay">GoPay<\/option>/, '应提供 GoPay 选项');
+  assert.match(selectHtml, /<option\s+value="gpc-helper">GPC Helper<\/option>/, '应提供 GPC Helper 选项');
+  assert.match(selectHtml, /<option\s+value="pix">Pix<\/option>/, '应提供 Pix 选项');
+  assert.match(
+    sidepanelJs,
+    /function\s+normalizePlusPaymentMethod[\s\S]*?normalized\s*===\s*PLUS_PAYMENT_METHOD_GOPAY[\s\S]*?normalized\s*===\s*PLUS_PAYMENT_METHOD_GPC_HELPER[\s\S]*?normalized\s*===\s*PLUS_PAYMENT_METHOD_PIX[\s\S]*?PLUS_PAYMENT_METHOD_PAYPAL/,
+    'normalizePlusPaymentMethod 应允许 GoPay、GPC Helper 和 Pix，而不是总是回退 PayPal'
+  );
+});
+
+test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
+  [
+    'row-pix-redeem-api-base-url',
+    'input-pix-redeem-api-base-url',
+    'row-pix-redeem-external-api-key',
+    'input-pix-redeem-external-api-key',
+    'btn-toggle-pix-redeem-external-api-key',
+    'row-pix-redeem-cdkey-pool',
+    'input-pix-redeem-cdkey-pool',
+    'pix-redeem-cdkey-pool-summary',
+  ].forEach((id) => {
+    assert.match(sidepanelHtml, new RegExp(`id="${id}"`), `Pix 设置应包含 ${id}`);
+  });
+
+  assert.match(
+    sidepanelJs,
+    /const\s+pixRowsVisible\s*=\s*enabled\s*&&\s*selectedMethod\s*===\s*pixValue/,
+    'Pix 配置行应只在 Plus Pix 支付方式下显示'
+  );
+  assert.match(
+    sidepanelJs,
+    /rowPixRedeemApiBaseUrl[\s\S]*?rowPixRedeemExternalApiKey[\s\S]*?rowPixRedeemCdkeyPool[\s\S]*?pixRowsVisible\s*\?\s*''\s*:\s*'none'/,
+    'Pix API、Key、卡密池行应统一跟随 pixRowsVisible 显示/隐藏'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemApiBaseUrl:\s*String\(inputPixRedeemApiBaseUrl\?\.value\s*\|\|\s*''\)\.trim\(\)/,
+    '保存配置时应写入 Pix API Base URL'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemExternalApiKey:\s*String\(inputPixRedeemExternalApiKey\?\.value\s*\|\|\s*''\)\.trim\(\)/,
+    '保存配置时应写入 Pix External API Key'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemCdkeyPoolText:\s*normalizePixRedeemCdkeyPoolTextValue\(inputPixRedeemCdkeyPool\?\.value\s*\|\|\s*''\)/,
+    '保存配置时应写入规范化后的 Pix 卡密池'
+  );
+});
+
 test('sidepanel renders PayPal-style hosted SMS auth pool manager', () => {
   [
     'btn-toggle-hosted-sms-auth-pool',
@@ -91,6 +150,29 @@ test('sidepanel renders PayPal-style hosted SMS auth pool manager', () => {
     sidepanelHtml,
     /<span\s+class="section-label">托管短信号池<\/span>/,
     'Auth 手机验证号池标题应与 PayPal 号池管理器一致可见'
+  );
+});
+
+test('sidepanel custom email pool accepts verification URL entries', () => {
+  assert.match(
+    sidepanelHtml,
+    /邮箱----取码URL/,
+    '自定义邮箱池输入提示应说明支持 邮箱----取码URL'
+  );
+  assert.match(
+    sidepanelJs,
+    /verificationUrl/,
+    '侧栏保存的 customEmailPoolEntries 应保留 verificationUrl 字段'
+  );
+  assert.match(
+    customEmailPoolManagerJs,
+    /verificationUrl/,
+    '自定义邮箱池管理器应解析并展示 verificationUrl'
+  );
+  assert.match(
+    sidepanelHtml,
+    /搜索邮箱 \/ 备注 \/ 取码URL/,
+    '自定义邮箱池搜索提示应包含取码 URL'
   );
 });
 

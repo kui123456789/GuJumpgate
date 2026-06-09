@@ -21,6 +21,40 @@
       return String(value || '').trim().toLowerCase();
     }
 
+    function normalizeVerificationUrl(value = '') {
+      const utilsNormalizer = globalScope.MailProviderUtils?.normalizeCustomEmailVerificationUrl;
+      if (typeof utilsNormalizer === 'function') {
+        return utilsNormalizer(value);
+      }
+      const raw = String(value || '').trim();
+      if (!/^https?:\/\//i.test(raw)) {
+        return '';
+      }
+      try {
+        const parsed = new URL(raw);
+        return /^https?:$/i.test(parsed.protocol) ? parsed.toString() : '';
+      } catch {
+        return '';
+      }
+    }
+
+    function parseEntryValue(value = '') {
+      const utilsParser = globalScope.MailProviderUtils?.parseCustomEmailPoolEntryValue;
+      if (typeof utilsParser === 'function') {
+        return utilsParser(value);
+      }
+      const raw = String(value || '').trim();
+      const separatorIndex = raw.indexOf('----');
+      const emailSource = separatorIndex >= 0 ? raw.slice(0, separatorIndex) : raw;
+      const suffix = separatorIndex >= 0 ? raw.slice(separatorIndex + 4).trim() : '';
+      const verificationUrl = normalizeVerificationUrl(suffix);
+      return {
+        email: normalizeEmail(emailSource),
+        credential: separatorIndex >= 0 && !verificationUrl ? raw : '',
+        verificationUrl,
+      };
+    }
+
     function isValidEmail(value = '') {
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
     }
@@ -33,14 +67,20 @@
     }
 
     function normalizeEntry(rawEntry = {}) {
-      const email = normalizeEmail(rawEntry?.email || '');
+      const parsedEntry = parseEntryValue(rawEntry?.credential || rawEntry?.email || '');
+      const email = normalizeEmail(parsedEntry.email || rawEntry?.email || '');
       if (!isValidEmail(email)) {
         return null;
       }
+      const verificationUrl = normalizeVerificationUrl(
+        rawEntry?.verificationUrl || rawEntry?.url || parsedEntry.verificationUrl || ''
+      );
 
       return {
         id: String(rawEntry?.id || createEntryId()),
         email,
+        credential: parsedEntry.verificationUrl ? '' : (parsedEntry.credential || String(rawEntry?.credential || '').trim()),
+        verificationUrl,
         enabled: rawEntry?.enabled !== undefined ? Boolean(rawEntry.enabled) : true,
         used: Boolean(rawEntry?.used),
         note: String(rawEntry?.note || '').trim(),
@@ -96,6 +136,7 @@
 
         const haystack = [
           entry.email,
+          entry.verificationUrl,
           entry.note,
           entry.enabled ? 'enabled 启用' : 'disabled 停用',
           entry.used ? 'used 已用' : 'unused 未用',
@@ -160,7 +201,7 @@
       if (!renderedEntries.length) {
         selectedEntryIds.clear();
         dom.customEmailPoolList.innerHTML = '<div class="luckmail-empty">还没有自定义邮箱，先导入一批邮箱再开始。</div>';
-        dom.customEmailPoolSummary.textContent = '导入你提前准备好的注册邮箱，每行一个邮箱地址。';
+        dom.customEmailPoolSummary.textContent = '导入你提前准备好的注册邮箱，每行一个邮箱地址，或 邮箱----取码URL。';
         if (dom.btnCustomEmailPoolClearUsed) dom.btnCustomEmailPoolClearUsed.disabled = true;
         if (dom.btnCustomEmailPoolDeleteAll) dom.btnCustomEmailPoolDeleteAll.disabled = true;
         updateBulkUi([]);
@@ -202,8 +243,10 @@
               ${entry.current ? '<span class="luckmail-tag current">当前</span>' : ''}
               ${entry.used ? '<span class="luckmail-tag used">已用</span>' : '<span class="luckmail-tag active">未用</span>'}
               ${entry.enabled ? '<span class="luckmail-tag active">启用</span>' : '<span class="luckmail-tag disabled">停用</span>'}
+              ${entry.verificationUrl ? '<span class="luckmail-tag active">取码URL</span>' : ''}
               ${entry.note ? `<span class="luckmail-tag">${helpers.escapeHtml(entry.note)}</span>` : ''}
             </div>
+            ${entry.verificationUrl ? `<div class="luckmail-item-details mono">${helpers.escapeHtml(entry.verificationUrl)}</div>` : ''}
           </div>
           <div class="luckmail-item-actions">
             <button class="btn btn-outline btn-xs" type="button" data-action="use">使用此邮箱</button>
@@ -327,7 +370,7 @@
     async function importEntriesFromTextarea() {
       const text = String(dom.inputCustomEmailPoolImport?.value || '');
       if (!text.trim()) {
-        helpers.showToast('请先粘贴邮箱列表，每行一个邮箱。', 'warn');
+        helpers.showToast('请先粘贴邮箱列表，每行一个邮箱，或 邮箱----取码URL。', 'warn');
         return;
       }
 
@@ -336,11 +379,12 @@
       const importedEntries = [];
       let skippedCount = 0;
 
-      for (const line of String(text || '').split(/[\r\n,，;；]+/)) {
-        const email = normalizeEmail(line);
-        if (!email) {
+      for (const line of String(text || '').split(/\r?\n/)) {
+        const parsedEntry = parseEntryValue(line);
+        if (!parsedEntry.email && !parsedEntry.verificationUrl) {
           continue;
         }
+        const email = normalizeEmail(parsedEntry.email);
         if (!isValidEmail(email) || knownEmails.has(email)) {
           skippedCount += 1;
           continue;
@@ -350,6 +394,8 @@
         importedEntries.push({
           id: createEntryId(),
           email,
+          credential: parsedEntry.credential || '',
+          verificationUrl: parsedEntry.verificationUrl || '',
           enabled: true,
           used: false,
           note: '',
@@ -422,7 +468,7 @@
         dom.customEmailPoolList.innerHTML = '';
       }
       if (dom.customEmailPoolSummary) {
-        dom.customEmailPoolSummary.textContent = '导入你提前准备好的注册邮箱，每行一个邮箱地址。';
+        dom.customEmailPoolSummary.textContent = '导入你提前准备好的注册邮箱，每行一个邮箱地址，或 邮箱----取码URL。';
       }
       updateBulkUi([]);
     }

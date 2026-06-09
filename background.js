@@ -58,6 +58,7 @@ importScripts(
   'background/steps/paypal-approve.js',
   'background/steps/gopay-approve.js',
   'background/steps/plus-return-confirm.js',
+  'background/steps/pix-redeem.js',
   'background/steps/sub2api-session-import.js',
   'background/steps/cpa-session-import.js',
   'background/steps/oauth-login.js',
@@ -202,6 +203,36 @@ const PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDe
   signupMethod: 'phone',
   phoneSignupReloginAfterBindEmailEnabled: true,
 }) || PLUS_GPC_PHONE_STEP_DEFINITIONS;
+const PLUS_PIX_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'pix',
+}) || PLUS_GPC_STEP_DEFINITIONS;
+const PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'pix',
+  plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION,
+}) || PLUS_PIX_STEP_DEFINITIONS;
+const PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'pix',
+  plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION,
+}) || PLUS_PIX_STEP_DEFINITIONS;
+const PLUS_PIX_PHONE_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'pix',
+  signupMethod: 'phone',
+}) || PLUS_PIX_STEP_DEFINITIONS;
+const PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'pix',
+  signupMethod: 'phone',
+  phoneSignupReloginAfterBindEmailEnabled: true,
+}) || PLUS_PIX_PHONE_STEP_DEFINITIONS;
 const LOCAL_CPA_JSON_NO_RT_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
   activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
   panelMode: 'local-cpa-json-no-rt',
@@ -229,6 +260,11 @@ const ALL_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getAllSteps?.({
   ...PLUS_GPC_CPA_SESSION_STEP_DEFINITIONS,
   ...PLUS_GPC_PHONE_STEP_DEFINITIONS,
   ...PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
+  ...PLUS_PIX_STEP_DEFINITIONS,
+  ...PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS,
+  ...PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS,
+  ...PLUS_PIX_PHONE_STEP_DEFINITIONS,
+  ...PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
 ];
 const STEP_IDS = Array.from(new Set(ALL_STEP_DEFINITIONS
   .map((definition) => Number(definition?.id))
@@ -255,12 +291,17 @@ const PLUS_GPC_STEP_IDS = PLUS_GPC_STEP_DEFINITIONS
   .map((definition) => Number(definition?.id))
   .filter(Number.isFinite)
   .sort((left, right) => left - right);
+const PLUS_PIX_STEP_IDS = PLUS_PIX_STEP_DEFINITIONS
+  .map((definition) => Number(definition?.id))
+  .filter(Number.isFinite)
+  .sort((left, right) => left - right);
 const PLUS_STEP_IDS = PLUS_PAYPAL_STEP_IDS;
 const LAST_STEP_ID = Math.max(
   NORMAL_STEP_IDS[NORMAL_STEP_IDS.length - 1] || 10,
   PLUS_PAYPAL_STEP_IDS[PLUS_PAYPAL_STEP_IDS.length - 1] || 10,
   PLUS_GOPAY_STEP_IDS[PLUS_GOPAY_STEP_IDS.length - 1] || 10,
-  PLUS_GPC_STEP_IDS[PLUS_GPC_STEP_IDS.length - 1] || 10
+  PLUS_GPC_STEP_IDS[PLUS_GPC_STEP_IDS.length - 1] || 10,
+  PLUS_PIX_STEP_IDS[PLUS_PIX_STEP_IDS.length - 1] || 10
 );
 const FINAL_OAUTH_CHAIN_START_STEP = 7;
 
@@ -417,6 +458,8 @@ const {
   normalizeIcloudApiBaseUrl,
   normalizeIcloudForwardMailProvider,
   normalizeIcloudTargetMailboxType,
+  normalizeCustomEmailVerificationUrl,
+  parseCustomEmailPoolEntryValue,
   parseHiddenEmailCredential,
 } = self.MailProviderUtils;
 const {
@@ -833,6 +876,7 @@ const FIVE_SIM_OPERATOR = DEFAULT_FIVE_SIM_OPERATOR;
 const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
 const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
 const PLUS_PAYMENT_METHOD_GPC_HELPER = 'gpc-helper';
+const PLUS_PAYMENT_METHOD_PIX = 'pix';
 const DEFAULT_PLUS_PAYMENT_METHOD = PLUS_PAYMENT_METHOD_PAYPAL;
 const DISPLAY_TIMEZONE = 'Asia/Shanghai';
 const MICROSOFT_TOKEN_DNR_RULE_ID = 1001;
@@ -873,6 +917,16 @@ function isPlusModeState(state = {}) {
 }
 
 function normalizePlusPaymentMethod(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === PLUS_PAYMENT_METHOD_GOPAY) {
+    return PLUS_PAYMENT_METHOD_GOPAY;
+  }
+  if (normalized === PLUS_PAYMENT_METHOD_GPC_HELPER) {
+    return PLUS_PAYMENT_METHOD_GPC_HELPER;
+  }
+  if (normalized === PLUS_PAYMENT_METHOD_PIX) {
+    return PLUS_PAYMENT_METHOD_PIX;
+  }
   return PLUS_PAYMENT_METHOD_PAYPAL;
 }
 
@@ -970,6 +1024,20 @@ function getStepDefinitionsForState(state = {}) {
     }
     return PLUS_GOPAY_STEP_DEFINITIONS;
   }
+  if (paymentMethod === PLUS_PAYMENT_METHOD_PIX) {
+    if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
+      return PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS;
+    }
+    if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION) {
+      return PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS;
+    }
+    if (fallbackSignupMethod === SIGNUP_METHOD_PHONE) {
+      return state?.phoneSignupReloginAfterBindEmailEnabled
+        ? PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS
+        : PLUS_PIX_PHONE_STEP_DEFINITIONS;
+    }
+    return PLUS_PIX_STEP_DEFINITIONS;
+  }
   if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
     return PLUS_PAYPAL_SUB2API_SESSION_STEP_DEFINITIONS;
   }
@@ -994,7 +1062,10 @@ function getStepIdsForState(state = {}) {
   if (paymentMethod === PLUS_PAYMENT_METHOD_GPC_HELPER) {
     return PLUS_GPC_STEP_IDS;
   }
-  return paymentMethod === PLUS_PAYMENT_METHOD_GOPAY ? PLUS_GOPAY_STEP_IDS : PLUS_PAYPAL_STEP_IDS;
+  if (paymentMethod === PLUS_PAYMENT_METHOD_GOPAY) {
+    return PLUS_GOPAY_STEP_IDS;
+  }
+  return paymentMethod === PLUS_PAYMENT_METHOD_PIX ? PLUS_PIX_STEP_IDS : PLUS_PAYPAL_STEP_IDS;
 }
 
 function getLastStepIdForState(state = {}) {
@@ -1184,6 +1255,10 @@ const PERSISTED_SETTING_DEFAULTS = {
   hostedCheckoutSmsPoolUsage: {},
   hostedCheckoutCardDeclinedRetryEnabled: true,
   hostedCheckoutSmsPoolAutoDisableEnabled: false,
+  pixRedeemApiBaseUrl: '',
+  pixRedeemExternalApiKey: '',
+  pixRedeemCdkeyPoolText: '',
+  pixRedeemCdkeyUsage: {},
   chatGptApiSmsPoolText: '',
   chatGptApiSmsPoolUsage: {},
   chatGptApiSmsPoolAutoDisableEnabled: false,
@@ -2427,6 +2502,16 @@ async function ensureResolvedSignupMethodForRun(options = {}) {
 }
 
 function normalizePlusPaymentMethod(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === PLUS_PAYMENT_METHOD_GOPAY) {
+    return PLUS_PAYMENT_METHOD_GOPAY;
+  }
+  if (normalized === PLUS_PAYMENT_METHOD_GPC_HELPER) {
+    return PLUS_PAYMENT_METHOD_GPC_HELPER;
+  }
+  if (normalized === PLUS_PAYMENT_METHOD_PIX) {
+    return PLUS_PAYMENT_METHOD_PIX;
+  }
   return PLUS_PAYMENT_METHOD_PAYPAL;
 }
 
@@ -2976,8 +3061,33 @@ function normalizeCustomEmailPool(value = []) {
     : String(value || '').split(/[\r\n,，;；]+/);
 
   return source
-    .map((item) => parseHiddenEmailCredential(item).email)
+    .map((item) => {
+      if (typeof parseCustomEmailPoolEntryValue === 'function') {
+        return parseCustomEmailPoolEntryValue(item).email;
+      }
+      return parseHiddenEmailCredential(item).email;
+    })
     .filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item));
+}
+
+function parseCustomEmailPoolEntryForState(value = '') {
+  if (typeof parseCustomEmailPoolEntryValue === 'function') {
+    return parseCustomEmailPoolEntryValue(value);
+  }
+  const parsedCredential = parseHiddenEmailCredential(value);
+  return {
+    email: parsedCredential.email,
+    credential: parsedCredential.credential,
+    verificationUrl: '',
+  };
+}
+
+function normalizeCustomEmailVerificationUrlForState(value = '') {
+  if (typeof normalizeCustomEmailVerificationUrl === 'function') {
+    return normalizeCustomEmailVerificationUrl(value);
+  }
+  const raw = String(value || '').trim();
+  return /^https?:\/\//i.test(raw) ? raw : '';
 }
 
 function normalizeCustomEmailPoolEntryObjects(value = []) {
@@ -2989,8 +3099,8 @@ function normalizeCustomEmailPoolEntryObjects(value = []) {
     const asObject = rawEntry && typeof rawEntry === 'object'
       ? rawEntry
       : { email: rawEntry };
-    const parsedCredential = parseHiddenEmailCredential(asObject.credential || asObject.email || '');
-    const email = parsedCredential.email;
+    const parsedEntry = parseCustomEmailPoolEntryForState(asObject.credential || asObject.email || '');
+    const email = parsedEntry.email;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       continue;
     }
@@ -3001,7 +3111,8 @@ function normalizeCustomEmailPoolEntryObjects(value = []) {
     entries.push({
       id: String(asObject.id || `custom-pool-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
       email,
-      credential: parsedCredential.credential || String(asObject.credential || '').trim(),
+      credential: parsedEntry.verificationUrl ? '' : (parsedEntry.credential || String(asObject.credential || '').trim()),
+      verificationUrl: normalizeCustomEmailVerificationUrlForState(asObject.verificationUrl || asObject.url || parsedEntry.verificationUrl || ''),
       enabled: asObject.enabled !== undefined ? Boolean(asObject.enabled) : true,
       used: Boolean(asObject.used),
       note: String(asObject.note || '').trim(),
@@ -3042,6 +3153,7 @@ function getCustomEmailPoolEntries(state = {}) {
   return normalizeCustomEmailPool(state?.customEmailPool).map((email) => ({
     id: `custom-pool-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     email,
+    verificationUrl: '',
     enabled: true,
     used: false,
     note: '',
@@ -4064,6 +4176,41 @@ function normalizePersistentSettingValue(key, value) {
           failureCount: Math.max(0, Math.floor(Number(item.failureCount) || 0)),
         }];
       }).filter(([key]) => Boolean(key)));
+    case 'pixRedeemApiBaseUrl':
+      return String(value || '')
+        .trim()
+        .replace(/\/+$/g, '')
+        .replace(/\/api\/external\/cdkey-redeems$/i, '')
+        .replace(/\/+$/g, '');
+    case 'pixRedeemExternalApiKey':
+      return String(value || '').trim();
+    case 'pixRedeemCdkeyPoolText': {
+      const seen = new Set();
+      return String(value || '')
+        .replace(/\r/g, '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => {
+          if (!line || seen.has(line)) {
+            return false;
+          }
+          seen.add(line);
+          return true;
+        })
+        .join('\n');
+    }
+    case 'pixRedeemCdkeyUsage':
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+      }
+      return Object.fromEntries(Object.entries(value).map(([key, usage]) => {
+        const item = usage && typeof usage === 'object' && !Array.isArray(usage) ? usage : {};
+        return [String(key || '').trim(), {
+          usedAt: Math.max(0, Number(item.usedAt) || 0),
+          lastAttemptAt: Math.max(0, Number(item.lastAttemptAt) || 0),
+          lastError: String(item.lastError || '').trim(),
+        }];
+      }).filter(([key]) => Boolean(key)));
     case 'hostedSmsPoolText':
       return String(value || '')
         .replace(/\r/g, '')
@@ -4970,6 +5117,14 @@ async function setState(updates) {
         hostedSmsPoolUsage: normalizePersistentSettingValue(
           'hostedSmsPoolUsage',
           sessionUpdates.hostedSmsPoolUsage
+        ),
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(sessionUpdates, 'pixRedeemCdkeyUsage')) {
+      await chrome.storage.local.set({
+        pixRedeemCdkeyUsage: normalizePersistentSettingValue(
+          'pixRedeemCdkeyUsage',
+          sessionUpdates.pixRedeemCdkeyUsage
         ),
       });
     }
@@ -16067,6 +16222,7 @@ const step4Executor = self.MultiPageBackgroundStep4?.createStep4Executor({
   FREEMAIL_PROVIDER,
   MOEMAIL_PROVIDER,
   YYDSMAIL_PROVIDER,
+  resolveCustomEmailVerificationStep: verificationFlowHelpers.resolveCustomEmailVerificationStep,
   resolveVerificationStep: verificationFlowHelpers.resolveVerificationStep,
   reuseOrCreateTab,
   sendToContentScript,
@@ -16144,6 +16300,7 @@ const step8Executor = self.MultiPageBackgroundStep8?.createStep8Executor({
   isTabAlive,
   isVerificationMailPollingError,
   LUCKMAIL_PROVIDER,
+  resolveCustomEmailVerificationStep: verificationFlowHelpers.resolveCustomEmailVerificationStep,
   resolveVerificationStep: verificationFlowHelpers.resolveVerificationStep,
   resolveSignupEmailForFlow,
   persistRegistrationEmailState,
@@ -16259,6 +16416,22 @@ const plusReturnConfirmExecutor = self.MultiPageBackgroundPlusReturnConfirm?.cre
   sleepWithStop,
   waitForTabUrlMatchUntilStopped,
 });
+const pixRedeemExecutor = self.MultiPageBackgroundPixRedeem?.createPixRedeemExecutor({
+  addLog,
+  chrome,
+  completeNodeFromBackground,
+  ensureContentScriptReadyOnTabUntilStopped,
+  fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  getState,
+  getTabId,
+  isTabAlive,
+  registerTab,
+  sendTabMessageUntilStopped,
+  setState,
+  sleepWithStop,
+  throwIfStopped,
+  waitForTabCompleteUntilStopped,
+});
 const sub2ApiSessionImportExecutor = self.MultiPageBackgroundSub2ApiSessionImport?.createSub2ApiSessionImportExecutor({
   addLog,
   chrome,
@@ -16368,6 +16541,7 @@ const stepExecutorsByKey = {
     ? goPayApproveExecutor.executeGoPayApprove(state)
     : payPalApproveExecutor.executePayPalApprove(state),
   'plus-checkout-return': (state) => plusReturnConfirmExecutor.executePlusReturnConfirm(state),
+  'pix-redeem': (state) => pixRedeemExecutor.executePixRedeem(state),
   'sub2api-session-import': (state) => sub2ApiSessionImportExecutor.executeSub2ApiSessionImport(state),
   'cpa-session-import': (state) => cpaSessionImportExecutor.executeCpaSessionImport(state),
   'oauth-login': (state) => step7Executor.executeStep7(state),
@@ -16584,6 +16758,11 @@ const plusGpcPhoneStepRegistry = buildStepRegistry(PLUS_GPC_PHONE_STEP_DEFINITIO
 const plusGpcPhoneBoundEmailReloginStepRegistry = buildStepRegistry(PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS);
 const plusGpcSub2ApiSessionStepRegistry = buildStepRegistry(PLUS_GPC_SUB2API_SESSION_STEP_DEFINITIONS);
 const plusGpcCpaSessionStepRegistry = buildStepRegistry(PLUS_GPC_CPA_SESSION_STEP_DEFINITIONS);
+const plusPixStepRegistry = buildStepRegistry(PLUS_PIX_STEP_DEFINITIONS);
+const plusPixPhoneStepRegistry = buildStepRegistry(PLUS_PIX_PHONE_STEP_DEFINITIONS);
+const plusPixPhoneBoundEmailReloginStepRegistry = buildStepRegistry(PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS);
+const plusPixSub2ApiSessionStepRegistry = buildStepRegistry(PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS);
+const plusPixCpaSessionStepRegistry = buildStepRegistry(PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS);
 const localCpaJsonNoRtStepRegistry = buildStepRegistry(LOCAL_CPA_JSON_NO_RT_STEP_DEFINITIONS);
 
 function getStepRegistryForState(state = {}) {
@@ -16633,6 +16812,18 @@ function getStepRegistryForState(state = {}) {
       return useBoundEmailRelogin ? plusGoPayPhoneBoundEmailReloginStepRegistry : plusGoPayPhoneStepRegistry;
     }
     return plusGoPayStepRegistry;
+  }
+  if (paymentMethod === PLUS_PAYMENT_METHOD_PIX) {
+    if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
+      return plusPixSub2ApiSessionStepRegistry;
+    }
+    if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION) {
+      return plusPixCpaSessionStepRegistry;
+    }
+    if (signupMethod === SIGNUP_METHOD_PHONE) {
+      return useBoundEmailRelogin ? plusPixPhoneBoundEmailReloginStepRegistry : plusPixPhoneStepRegistry;
+    }
+    return plusPixStepRegistry;
   }
   if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
     return plusPayPalSub2ApiSessionStepRegistry;

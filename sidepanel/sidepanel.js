@@ -275,6 +275,14 @@ const inputGpcHelperLocalSmsUrl = document.getElementById('input-gpc-helper-loca
 const rowGpcHelperPin = document.getElementById('row-gpc-helper-pin');
 const inputGpcHelperPin = document.getElementById('input-gpc-helper-pin');
 const btnToggleGpcHelperPin = document.getElementById('btn-toggle-gpc-helper-pin');
+const rowPixRedeemApiBaseUrl = document.getElementById('row-pix-redeem-api-base-url');
+const inputPixRedeemApiBaseUrl = document.getElementById('input-pix-redeem-api-base-url');
+const rowPixRedeemExternalApiKey = document.getElementById('row-pix-redeem-external-api-key');
+const inputPixRedeemExternalApiKey = document.getElementById('input-pix-redeem-external-api-key');
+const btnTogglePixRedeemExternalApiKey = document.getElementById('btn-toggle-pix-redeem-external-api-key');
+const rowPixRedeemCdkeyPool = document.getElementById('row-pix-redeem-cdkey-pool');
+const inputPixRedeemCdkeyPool = document.getElementById('input-pix-redeem-cdkey-pool');
+const pixRedeemCdkeyPoolSummary = document.getElementById('pix-redeem-cdkey-pool-summary');
 const rowGoPayCountryCode = document.getElementById('row-gopay-country-code');
 const selectGoPayCountryCode = document.getElementById('select-gopay-country-code');
 const rowGoPayPhone = document.getElementById('row-gopay-phone');
@@ -689,6 +697,7 @@ placePhoneVerificationSectionNearMainSettings();
 const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
 const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
 const PLUS_PAYMENT_METHOD_GPC_HELPER = 'gpc-helper';
+const PLUS_PAYMENT_METHOD_PIX = 'pix';
 const BUILTIN_PLUS_CHECKOUT_CLOUD_CONVERSION_API_URL = 'https://gujumpgate.zg.fyi/api/checkout';
 const BUILTIN_PLUS_CHECKOUT_CLOUD_CONVERSION_API_KEY = '2KwVxE6f0ABH002JLkoQJ9ReRf4_d01y';
 const PLUS_ACCOUNT_ACCESS_STRATEGY_OAUTH = 'oauth';
@@ -1917,6 +1926,30 @@ const parseHiddenEmailCredential = window.MailProviderUtils?.parseHiddenEmailCre
       credential: credential.trim(),
     };
   });
+const normalizeCustomEmailVerificationUrlValue = window.MailProviderUtils?.normalizeCustomEmailVerificationUrl
+  || ((value = '') => {
+    const raw = String(value || '').trim();
+    if (!/^https?:\/\//i.test(raw)) return '';
+    try {
+      const parsed = new URL(raw);
+      return /^https?:$/i.test(parsed.protocol) ? parsed.toString() : '';
+    } catch {
+      return '';
+    }
+  });
+const parseCustomEmailPoolEntryValueForSidepanel = window.MailProviderUtils?.parseCustomEmailPoolEntryValue
+  || ((value = '') => {
+    const raw = String(value || '').trim();
+    const separatorIndex = raw.indexOf('----');
+    const emailSource = separatorIndex >= 0 ? raw.slice(0, separatorIndex) : raw;
+    const suffix = separatorIndex >= 0 ? raw.slice(separatorIndex + 4).trim() : '';
+    const verificationUrl = normalizeCustomEmailVerificationUrlValue(suffix);
+    return {
+      email: emailSource.trim().toLowerCase(),
+      credential: separatorIndex >= 0 && !verificationUrl ? raw : '',
+      verificationUrl,
+    };
+  });
 const ICLOUD_FORWARD_MAIL_PROVIDER_LABELS = Object.fromEntries(
   getIcloudForwardMailProviderOptions().map((option) => [option.value, option.label])
 );
@@ -2864,7 +2897,66 @@ async function persistOperationDelayToggle() {
 }
 
 function normalizePlusPaymentMethod(value = '') {
-  return typeof PLUS_PAYMENT_METHOD_PAYPAL !== 'undefined' ? PLUS_PAYMENT_METHOD_PAYPAL : 'paypal';
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === PLUS_PAYMENT_METHOD_GOPAY) {
+    return PLUS_PAYMENT_METHOD_GOPAY;
+  }
+  if (normalized === PLUS_PAYMENT_METHOD_GPC_HELPER) {
+    return PLUS_PAYMENT_METHOD_GPC_HELPER;
+  }
+  if (normalized === PLUS_PAYMENT_METHOD_PIX) {
+    return PLUS_PAYMENT_METHOD_PIX;
+  }
+  return PLUS_PAYMENT_METHOD_PAYPAL;
+}
+
+function normalizePixRedeemCdkeyPoolTextValue(value = '') {
+  const seen = new Set();
+  return String(value || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line || seen.has(line)) {
+        return false;
+      }
+      seen.add(line);
+      return true;
+    })
+    .join('\n');
+}
+
+function parsePixRedeemCdkeyPoolTextValue(value = '') {
+  return normalizePixRedeemCdkeyPoolTextValue(value)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function normalizePixRedeemCdkeyUsageValue(value = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, usage]) => {
+    const cdkey = String(key || '').trim();
+    const item = usage && typeof usage === 'object' && !Array.isArray(usage) ? usage : {};
+    return [cdkey, {
+      usedAt: Math.max(0, Number(item.usedAt) || 0),
+      lastAttemptAt: Math.max(0, Number(item.lastAttemptAt) || 0),
+      lastError: String(item.lastError || '').trim(),
+    }];
+  }).filter(([key]) => Boolean(key)));
+}
+
+function updatePixRedeemCdkeyPoolSummary(state = latestState) {
+  if (!pixRedeemCdkeyPoolSummary) {
+    return;
+  }
+  const poolText = inputPixRedeemCdkeyPool?.value ?? state?.pixRedeemCdkeyPoolText ?? '';
+  const cdkeys = parsePixRedeemCdkeyPoolTextValue(poolText);
+  const usage = normalizePixRedeemCdkeyUsageValue(state?.pixRedeemCdkeyUsage || {});
+  const usedCount = cdkeys.filter((cdkey) => Number(usage?.[cdkey]?.usedAt) > 0).length;
+  pixRedeemCdkeyPoolSummary.textContent = `总数 ${cdkeys.length} / 已用 ${usedCount} / 可用 ${Math.max(0, cdkeys.length - usedCount)}`;
 }
 
 function getSelectedPlusPaymentMethod(state = latestState) {
@@ -3943,7 +4035,7 @@ function normalizeCustomEmailPoolEntries(value = '') {
     : String(value || '').split(/[\r\n,，;；]+/);
 
   return source
-    .map((item) => parseHiddenEmailCredential(item).email)
+    .map((item) => parseCustomEmailPoolEntryValueForSidepanel(item).email)
     .filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item));
 }
 
@@ -3967,8 +4059,8 @@ function normalizeCustomEmailPoolEntryObjects(value = []) {
     const asObject = rawEntry && typeof rawEntry === 'object'
       ? rawEntry
       : { email: rawEntry };
-    const parsedCredential = parseHiddenEmailCredential(asObject.credential || asObject.email || '');
-    const email = normalizeCustomEmailPoolEntryEmail(parsedCredential.email || '');
+    const parsedEntry = parseCustomEmailPoolEntryValueForSidepanel(asObject.credential || asObject.email || '');
+    const email = normalizeCustomEmailPoolEntryEmail(parsedEntry.email || '');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       continue;
     }
@@ -3979,7 +4071,8 @@ function normalizeCustomEmailPoolEntryObjects(value = []) {
     entries.push({
       id: String(asObject.id || createCustomEmailPoolEntryId()),
       email,
-      credential: parsedCredential.credential || String(asObject.credential || '').trim(),
+      credential: parsedEntry.verificationUrl ? '' : (parsedEntry.credential || String(asObject.credential || '').trim()),
+      verificationUrl: normalizeCustomEmailVerificationUrlValue(asObject.verificationUrl || asObject.url || parsedEntry.verificationUrl || ''),
       enabled: asObject.enabled !== undefined ? Boolean(asObject.enabled) : true,
       used: Boolean(asObject.used),
       note: String(asObject.note || '').trim(),
@@ -4021,6 +4114,7 @@ function restoreCustomEmailPoolEntriesFromState(state = {}) {
   return normalizeCustomEmailPoolEntries(state?.customEmailPool).map((email) => ({
     id: createCustomEmailPoolEntryId(),
     email,
+    verificationUrl: '',
     enabled: true,
     used: false,
     note: '',
@@ -5536,6 +5630,10 @@ function collectSettingsPayload() {
     plusPaymentMethod,
     plusCheckoutMode: selectedPlusCheckoutMode,
     plusCheckoutProfiles: nextPlusCheckoutProfiles,
+    pixRedeemApiBaseUrl: String(inputPixRedeemApiBaseUrl?.value || '').trim(),
+    pixRedeemExternalApiKey: String(inputPixRedeemExternalApiKey?.value || '').trim(),
+    pixRedeemCdkeyPoolText: normalizePixRedeemCdkeyPoolTextValue(inputPixRedeemCdkeyPool?.value || ''),
+    pixRedeemCdkeyUsage: normalizePixRedeemCdkeyUsageValue(latestState?.pixRedeemCdkeyUsage || {}),
     paypalEmail: String(currentPayPalAccount?.email || latestState?.paypalEmail || '').trim(),
     paypalPassword: String(currentPayPalAccount?.password || latestState?.paypalPassword || ''),
     currentPayPalAccountId: String(latestState?.currentPayPalAccountId || '').trim(),
@@ -11921,6 +12019,7 @@ function updatePlusModeUI() {
   const paypalValue = typeof PLUS_PAYMENT_METHOD_PAYPAL !== 'undefined' ? PLUS_PAYMENT_METHOD_PAYPAL : 'paypal';
   const gopayValue = typeof PLUS_PAYMENT_METHOD_GOPAY !== 'undefined' ? PLUS_PAYMENT_METHOD_GOPAY : 'gopay';
   const gpcValue = typeof PLUS_PAYMENT_METHOD_GPC_HELPER !== 'undefined' ? PLUS_PAYMENT_METHOD_GPC_HELPER : 'gpc-helper';
+  const pixValue = typeof PLUS_PAYMENT_METHOD_PIX !== 'undefined' ? PLUS_PAYMENT_METHOD_PIX : 'pix';
   const defaultMethod = typeof DEFAULT_PLUS_PAYMENT_METHOD !== 'undefined' ? DEFAULT_PLUS_PAYMENT_METHOD : paypalValue;
   const rawEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
     ? Boolean(inputPlusModeEnabled.checked)
@@ -11976,6 +12075,7 @@ function updatePlusModeUI() {
   );
   const selectedMethod = method;
   const gpcRowsVisible = enabled && selectedMethod === gpcValue;
+  const pixRowsVisible = enabled && selectedMethod === pixValue;
   const canShowGpcModeSelector = gpcRowsVisible;
   const localSmsControlsVisible = gpcRowsVisible && !isGpcAutoMode;
   const effectiveLocalSmsEnabled = !isGpcAutoMode && localSmsEnabled;
@@ -11998,6 +12098,8 @@ function updatePlusModeUI() {
   if (typeof plusPaymentMethodCaption !== 'undefined' && plusPaymentMethodCaption) {
     plusPaymentMethodCaption.textContent = selectedMethod === gpcValue
       ? `GPC ${isGpcAutoMode ? '自动' : '手动'}订阅链路`
+      : selectedMethod === pixValue
+      ? 'Pix 卡密兑换链路'
       : selectedMethod === gopayValue
       ? 'GoPay 印尼订阅链路'
       : 'PayPal 订阅链路';
@@ -12054,6 +12156,17 @@ function updatePlusModeUI() {
     }
     row.style.display = gpcRowsVisible ? '' : 'none';
   });
+  [
+    typeof rowPixRedeemApiBaseUrl !== 'undefined' ? rowPixRedeemApiBaseUrl : null,
+    typeof rowPixRedeemExternalApiKey !== 'undefined' ? rowPixRedeemExternalApiKey : null,
+    typeof rowPixRedeemCdkeyPool !== 'undefined' ? rowPixRedeemCdkeyPool : null,
+  ].forEach((row) => {
+    if (!row) {
+      return;
+    }
+    row.style.display = pixRowsVisible ? '' : 'none';
+  });
+  updatePixRedeemCdkeyPoolSummary(latestState);
   if (typeof rowGpcHelperPhoneMode !== 'undefined' && rowGpcHelperPhoneMode) {
     rowGpcHelperPhoneMode.style.display = canShowGpcModeSelector ? '' : 'none';
   }
@@ -13101,6 +13214,16 @@ function applySettingsState(state) {
   if (typeof inputGpcHelperPin !== 'undefined' && inputGpcHelperPin) {
     inputGpcHelperPin.value = state?.gopayHelperPin || '';
   }
+  if (typeof inputPixRedeemApiBaseUrl !== 'undefined' && inputPixRedeemApiBaseUrl) {
+    inputPixRedeemApiBaseUrl.value = String(state?.pixRedeemApiBaseUrl || '').trim();
+  }
+  if (typeof inputPixRedeemExternalApiKey !== 'undefined' && inputPixRedeemExternalApiKey) {
+    inputPixRedeemExternalApiKey.value = String(state?.pixRedeemExternalApiKey || '').trim();
+  }
+  if (typeof inputPixRedeemCdkeyPool !== 'undefined' && inputPixRedeemCdkeyPool) {
+    inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(state?.pixRedeemCdkeyPoolText || '');
+  }
+  updatePixRedeemCdkeyPoolSummary(state);
   if (typeof displayGpcHelperBalance !== 'undefined' && displayGpcHelperBalance) {
     const balanceText = String(state?.gopayHelperBalance || '').trim();
     const balanceError = String(state?.gopayHelperBalanceError || '').trim();
@@ -17918,12 +18041,18 @@ selectPlusPaymentMethod?.addEventListener('change', () => {
   inputGpcHelperLocalSmsEnabled,
   inputGpcHelperLocalSmsUrl,
   inputGpcHelperPin,
+  inputPixRedeemApiBaseUrl,
+  inputPixRedeemExternalApiKey,
+  inputPixRedeemCdkeyPool,
   selectGoPayCountryCode,
   inputGoPayPhone,
   inputGoPayOtp,
   inputGoPayPin,
 ].forEach((input) => {
   input?.addEventListener('input', () => {
+    if (input === inputPixRedeemCdkeyPool) {
+      updatePixRedeemCdkeyPoolSummary(latestState);
+    }
     markSettingsDirty(true);
     scheduleSettingsAutoSave();
   });
@@ -20909,6 +21038,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             ? `余额查询失败：${balanceError}`
             : (balanceText || '余额已更新');
         }
+      }
+      if (message.payload.pixRedeemApiBaseUrl !== undefined && inputPixRedeemApiBaseUrl) {
+        inputPixRedeemApiBaseUrl.value = String(message.payload.pixRedeemApiBaseUrl || '').trim();
+      }
+      if (message.payload.pixRedeemExternalApiKey !== undefined && inputPixRedeemExternalApiKey) {
+        inputPixRedeemExternalApiKey.value = String(message.payload.pixRedeemExternalApiKey || '').trim();
+      }
+      if (message.payload.pixRedeemCdkeyPoolText !== undefined && inputPixRedeemCdkeyPool) {
+        inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(message.payload.pixRedeemCdkeyPoolText);
+      }
+      if (
+        message.payload.pixRedeemCdkeyPoolText !== undefined
+        || message.payload.pixRedeemCdkeyUsage !== undefined
+      ) {
+        updatePixRedeemCdkeyPoolSummary(latestState);
       }
       if (
         message.payload.plusModeEnabled !== undefined

@@ -47,7 +47,36 @@ test('openai registration flows go from signup code directly to profile', () => 
     { plusModeEnabled: true, plusPaymentMethod: 'paypal', plusHostedCheckoutIsFinalStep: true },
     { plusModeEnabled: true, plusPaymentMethod: 'gopay' },
     { plusModeEnabled: true, plusPaymentMethod: 'gpc-helper' },
+    { plusModeEnabled: true, plusPaymentMethod: 'pix' },
   ].forEach((options) => assertRegistrationPrefixHasNoPasskeyStep(options));
+});
+
+test('pix plus flow redeems a cdkey after registration before OAuth', () => {
+  const keys = keysFor({
+    plusModeEnabled: true,
+    plusPaymentMethod: 'pix',
+  });
+
+  assert.deepEqual(keys.slice(0, 7), [
+    'open-chatgpt',
+    'submit-signup-email',
+    'fill-password',
+    'fetch-signup-code',
+    'fill-profile',
+    'pix-redeem',
+    'oauth-login',
+  ]);
+  assert.equal(keys.includes('plus-checkout-create'), false);
+  assert.equal(keys.includes('plus-checkout-billing'), false);
+  assert.equal(keys.includes('paypal-approve'), false);
+  assert.equal(keys.includes('gopay-subscription-confirm'), false);
+
+  const redeemStep = getSteps({
+    plusModeEnabled: true,
+    plusPaymentMethod: 'pix',
+  }).find((step) => step.key === 'pix-redeem');
+  assert.equal(redeemStep?.title, 'Pix 卡密兑换 Plus');
+  assert.equal(redeemStep?.command, 'pix-redeem');
 });
 
 test('hosted checkout keeps plus checkout creation before OAuth after removing passkey step', () => {

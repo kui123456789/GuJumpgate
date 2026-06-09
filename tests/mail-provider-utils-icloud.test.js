@@ -41,4 +41,22 @@ assert.deepEqual(
   }
 );
 
+assert.deepEqual(
+  utils.parseCustomEmailPoolEntryValue('Alias@Example.com----https://example.test/code?email=Alias%40Example.com'),
+  {
+    email: 'alias@example.com',
+    credential: '',
+    verificationUrl: 'https://example.test/code?email=Alias%40Example.com',
+  }
+);
+
+assert.deepEqual(
+  utils.parseCustomEmailPoolEntryValue('Alias@Example.com----secret-token'),
+  {
+    email: 'alias@example.com',
+    credential: 'Alias@Example.com----secret-token',
+    verificationUrl: '',
+  }
+);
+
 console.log('mail-provider-utils iCloud tests passed');

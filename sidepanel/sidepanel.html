@@ -318,8 +318,11 @@
       <div class="data-row" id="row-plus-payment-method" style="display:none;">
         <span class="data-label">Plus 支付</span>
         <div class="data-inline">
-          <select id="select-plus-payment-method" class="data-select" disabled>
+          <select id="select-plus-payment-method" class="data-select plus-payment-method-select">
             <option value="paypal">PayPal</option>
+            <option value="gopay">GoPay</option>
+            <option value="gpc-helper">GPC Helper</option>
+            <option value="pix">Pix</option>
           </select>
           <button id="btn-gpc-card-key-purchase" class="btn btn-outline btn-sm data-inline-btn" type="button" style="display:none;">服务说明</button>
           <span class="setting-caption" id="plus-payment-method-caption">PayPal 订阅链路</span>
@@ -565,6 +568,31 @@
             title="显示 GPC PIN"></button>
         </div>
       </div>
+      <div class="data-row" id="row-pix-redeem-api-base-url" style="display:none;">
+        <span class="data-label">Pix API</span>
+        <input type="text" id="input-pix-redeem-api-base-url" class="data-input"
+          placeholder="https://your-pix-api.example" autocomplete="off"
+          title="只填 API Base URL，系统会固定请求 /api/external/cdkey-redeems" />
+      </div>
+      <div class="data-row" id="row-pix-redeem-external-api-key" style="display:none;">
+        <span class="data-label">Pix Key</span>
+        <div class="input-with-icon">
+          <input type="password" id="input-pix-redeem-external-api-key" class="data-input data-input-with-icon"
+            placeholder="X-External-Api-Key" autocomplete="off" />
+          <button id="btn-toggle-pix-redeem-external-api-key" class="input-icon-btn" type="button"
+            data-password-toggle="input-pix-redeem-external-api-key" data-show-label="显示 Pix API Key"
+            data-hide-label="隐藏 Pix API Key" aria-label="显示 Pix API Key"
+            title="显示 Pix API Key"></button>
+        </div>
+      </div>
+      <div class="data-row data-check-row" id="row-pix-redeem-cdkey-pool" style="display:none;">
+        <span class="data-label">Pix 卡密池</span>
+        <div class="hotmail-import-box">
+          <textarea id="input-pix-redeem-cdkey-pool" class="data-textarea mono" rows="5"
+            placeholder="CDK-001&#10;CDK-002&#10;CDK-003"></textarea>
+          <div id="pix-redeem-cdkey-pool-summary" class="icloud-summary">总数 0 / 已用 0 / 可用 0</div>
+        </div>
+      </div>
       <div class="data-row" id="row-gopay-country-code" style="display:none;">
         <span class="data-label">GoPay 区号</span>
         <select id="select-gopay-country-code" class="data-select">
@@ -652,7 +680,7 @@
         <span class="data-label">邮箱池</span>
         <div class="hotmail-import-box">
           <textarea id="input-custom-email-pool" class="data-textarea mono" hidden
-            placeholder="每行一个邮箱，例如&#10;alias001@gmail.com&#10;alias002@gmail.com"></textarea>
+            placeholder="每行一个邮箱，或 邮箱----取码URL，例如&#10;alias001@gmail.com&#10;alias002@gmail.com----https://example.com/code"></textarea>
           <div class="section-mini-header">
             <div class="section-mini-copy">
               <span class="section-label">自定义邮箱池</span>
@@ -664,7 +692,7 @@
             </div>
           </div>
           <textarea id="input-custom-email-pool-import" class="data-textarea mono" rows="4"
-            placeholder="每行一个邮箱，例如&#10;alias001@gmail.com&#10;alias002@gmail.com"></textarea>
+            placeholder="每行一个邮箱，或 邮箱----取码URL，例如&#10;alias001@gmail.com&#10;alias002@gmail.com----https://example.com/code"></textarea>
           <div class="data-inline">
             <button id="btn-custom-email-pool-import" class="btn btn-primary btn-sm" type="button">导入邮箱</button>
           </div>
@@ -672,7 +700,7 @@
             <div id="custom-email-pool-summary" class="icloud-summary">导入你提前准备好的注册邮箱，每行一个邮箱地址。</div>
             <div class="icloud-toolbar">
               <input id="input-custom-email-pool-search" class="data-input icloud-search" type="text"
-                placeholder="搜索邮箱 / 备注" />
+                placeholder="搜索邮箱 / 备注 / 取码URL" />
               <select id="select-custom-email-pool-filter" class="data-select icloud-filter">
                 <option value="all">全部</option>
                 <option value="current">当前</option>

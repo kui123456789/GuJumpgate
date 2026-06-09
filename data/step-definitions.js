@@ -5,6 +5,7 @@
   const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
   const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
   const PLUS_PAYMENT_METHOD_GPC_HELPER = 'gpc-helper';
+  const PLUS_PAYMENT_METHOD_PIX = 'pix';
   const PLUS_PAYMENT_STEP_KEY = 'paypal-approve';
   const LOCAL_CPA_JSON_NO_RT_PANEL_MODE = 'local-cpa-json-no-rt';
   const PLUS_ACCOUNT_ACCESS_STRATEGY_OAUTH = 'oauth';
@@ -69,6 +70,15 @@
     { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
     { id: 6, order: 60, key: 'plus-checkout-create', title: '创建 GPC 订单', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-create' },
     { id: 7, order: 70, key: 'plus-checkout-billing', title: '等待 GPC 任务完成', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-billing' },
+  ];
+
+  const PLUS_PIX_PREFIX_STEP_DEFINITIONS = [
+    { id: 1, order: 10, key: 'open-chatgpt', title: '打开 ChatGPT 官网', sourceId: 'chatgpt', driverId: null, command: 'open-chatgpt' },
+    { id: 2, order: 20, key: 'submit-signup-email', title: '注册并输入邮箱', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-signup-email' },
+    { id: 3, order: 30, key: 'fill-password', title: '填写密码并继续', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-password' },
+    { id: 4, order: 40, key: 'fetch-signup-code', title: '获取注册验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-signup-code' },
+    { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
+    { id: 6, order: 60, key: 'pix-redeem', title: 'Pix 卡密兑换 Plus', sourceId: 'chatgpt', driverId: null, command: 'pix-redeem' },
   ];
 
   function isPhoneSignupReloginAfterBindEmailEnabled(options = {}) {
@@ -348,6 +358,23 @@
   );
   const PLUS_GPC_PHONE_STEP_DEFINITIONS = createOpenAiSteps(PLUS_GPC_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_PHONE);
   const PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createOpenAiSteps(PLUS_GPC_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
+  const PLUS_PIX_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PIX_PREFIX_STEP_DEFINITIONS, 7, 70, SIGNUP_METHOD_EMAIL);
+  const PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS = createOpenAiSteps(
+    PLUS_PIX_PREFIX_STEP_DEFINITIONS,
+    7,
+    70,
+    SIGNUP_METHOD_EMAIL,
+    { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION }
+  );
+  const PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS = createOpenAiSteps(
+    PLUS_PIX_PREFIX_STEP_DEFINITIONS,
+    7,
+    70,
+    SIGNUP_METHOD_EMAIL,
+    { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION }
+  );
+  const PLUS_PIX_PHONE_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PIX_PREFIX_STEP_DEFINITIONS, 7, 70, SIGNUP_METHOD_PHONE);
+  const PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PIX_PREFIX_STEP_DEFINITIONS, 7, 70, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
 
   const PHONE_SIGNUP_TITLE_OVERRIDES = Object.freeze({
     'submit-signup-email': '注册并输入手机号',
@@ -370,6 +397,16 @@
   }
 
   function normalizePlusPaymentMethod(value = '') {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === PLUS_PAYMENT_METHOD_GOPAY) {
+      return PLUS_PAYMENT_METHOD_GOPAY;
+    }
+    if (normalized === PLUS_PAYMENT_METHOD_GPC_HELPER) {
+      return PLUS_PAYMENT_METHOD_GPC_HELPER;
+    }
+    if (normalized === PLUS_PAYMENT_METHOD_PIX) {
+      return PLUS_PAYMENT_METHOD_PIX;
+    }
     return PLUS_PAYMENT_METHOD_PAYPAL;
   }
 
@@ -456,6 +493,20 @@
         return PLUS_GOPAY_CPA_SESSION_STEP_DEFINITIONS;
       }
       return PLUS_GOPAY_STEP_DEFINITIONS;
+    }
+    if (paymentMethod === PLUS_PAYMENT_METHOD_PIX) {
+      if (signupMethod === SIGNUP_METHOD_PHONE) {
+        return reloginAfterBindEmail
+          ? PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS
+          : PLUS_PIX_PHONE_STEP_DEFINITIONS;
+      }
+      if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
+        return PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS;
+      }
+      if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION) {
+        return PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS;
+      }
+      return PLUS_PIX_STEP_DEFINITIONS;
     }
     if (shouldTreatHostedCheckoutAsFinalStep({
       ...options,
@@ -568,6 +619,11 @@
           ...PLUS_GPC_CPA_SESSION_STEP_DEFINITIONS,
           ...PLUS_GPC_PHONE_STEP_DEFINITIONS,
           ...PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
+          ...PLUS_PIX_STEP_DEFINITIONS,
+          ...PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS,
+          ...PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS,
+          ...PLUS_PIX_PHONE_STEP_DEFINITIONS,
+          ...PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
         ]) {
           keyed.set(`${step.id}:${step.key}`, step);
         }
@@ -768,6 +824,11 @@
     PLUS_GPC_CPA_SESSION_STEP_DEFINITIONS,
     PLUS_GPC_PHONE_STEP_DEFINITIONS,
     PLUS_GPC_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
+    PLUS_PIX_STEP_DEFINITIONS,
+    PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS,
+    PLUS_PIX_CPA_SESSION_STEP_DEFINITIONS,
+    PLUS_PIX_PHONE_STEP_DEFINITIONS,
+    PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS,
     SIGNUP_METHOD_EMAIL,
     SIGNUP_METHOD_PHONE,
     getAllSteps,

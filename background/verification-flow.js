@@ -48,6 +48,7 @@
       sleepWithStop,
       throwIfStopped,
       VERIFICATION_POLL_MAX_ROUNDS,
+      fetch: fetchImpl = null,
     } = deps;
     let activeVerificationLogStep = null;
 
@@ -96,6 +97,206 @@
 
     function getVerificationCodeLabel(step) {
       return step === 4 ? '注册' : '登录';
+    }
+
+    function normalizeEmailForComparison(value = '') {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function normalizeCustomEmailVerificationUrl(value = '') {
+      const rootScope = typeof self !== 'undefined' ? self : globalThis;
+      const sharedNormalizer = rootScope.MailProviderUtils?.normalizeCustomEmailVerificationUrl;
+      if (typeof sharedNormalizer === 'function') {
+        return sharedNormalizer(value);
+      }
+      const raw = String(value || '').trim();
+      if (!/^https?:\/\//i.test(raw)) {
+        return '';
+      }
+      try {
+        const parsed = new URL(raw);
+        return /^https?:$/i.test(parsed.protocol) ? parsed.toString() : '';
+      } catch {
+        return '';
+      }
+    }
+
+    function parseCustomEmailPoolEntryValue(value = '') {
+      const rootScope = typeof self !== 'undefined' ? self : globalThis;
+      const sharedParser = rootScope.MailProviderUtils?.parseCustomEmailPoolEntryValue;
+      if (typeof sharedParser === 'function') {
+        return sharedParser(value);
+      }
+      const raw = String(value || '').trim();
+      const separatorIndex = raw.indexOf('----');
+      const emailSource = separatorIndex >= 0 ? raw.slice(0, separatorIndex) : raw;
+      const suffix = separatorIndex >= 0 ? raw.slice(separatorIndex + 4).trim() : '';
+      const verificationUrl = normalizeCustomEmailVerificationUrl(suffix);
+      return {
+        email: normalizeEmailForComparison(emailSource),
+        credential: separatorIndex >= 0 && !verificationUrl ? raw : '',
+        verificationUrl,
+      };
+    }
+
+    function normalizeCustomEmailPoolEntryForVerification(rawEntry = {}) {
+      const asObject = rawEntry && typeof rawEntry === 'object'
+        ? rawEntry
+        : { email: rawEntry };
+      const parsedEntry = parseCustomEmailPoolEntryValue(asObject.credential || asObject.email || '');
+      const email = normalizeEmailForComparison(parsedEntry.email || asObject.email || '');
+      if (!email) {
+        return null;
+      }
+      return {
+        email,
+        verificationUrl: normalizeCustomEmailVerificationUrl(
+          asObject.verificationUrl || asObject.url || parsedEntry.verificationUrl || ''
+        ),
+      };
+    }
+
+    function getCustomEmailVerificationEntry(state = {}, targetEmail = '') {
+      const normalizedTarget = normalizeEmailForComparison(
+        targetEmail
+        || state?.step8VerificationTargetEmail
+        || state?.boundEmail
+        || state?.email
+      );
+      if (!normalizedTarget) {
+        return null;
+      }
+
+      const entries = Array.isArray(state?.customEmailPoolEntries)
+        ? state.customEmailPoolEntries
+        : [];
+      for (const rawEntry of entries) {
+        const entry = normalizeCustomEmailPoolEntryForVerification(rawEntry);
+        if (entry?.email === normalizedTarget) {
+          return entry;
+        }
+      }
+
+      const legacyEntries = Array.isArray(state?.customEmailPool)
+        ? state.customEmailPool
+        : String(state?.customEmailPool || '').split(/\r?\n/);
+      for (const rawEntry of legacyEntries) {
+        const entry = normalizeCustomEmailPoolEntryForVerification(rawEntry);
+        if (entry?.email === normalizedTarget) {
+          return entry;
+        }
+      }
+      return null;
+    }
+
+    function normalizeDigits(value = '') {
+      const digits = String(value || '').replace(/\D+/g, '');
+      return digits.length === 6 ? digits : '';
+    }
+
+    function extractCodeFromText(value = '', options = {}) {
+      const text = String(value || '');
+      if (!text.trim()) {
+        return '';
+      }
+      const contextualPatterns = [
+        /(?:openai|chatgpt|verification|verify|one[-\s]*time|code|验证码|一次性)[^0-9]{0,40}((?:\d[\s-]*){6})/i,
+        /((?:\d[\s-]*){6})[^0-9]{0,40}(?:openai|chatgpt|verification|verify|one[-\s]*time|code|验证码|一次性)/i,
+      ];
+      for (const pattern of contextualPatterns) {
+        const match = text.match(pattern);
+        const code = match ? normalizeDigits(match[1]) : '';
+        if (code) {
+          return code;
+        }
+      }
+      if (options.allowBareCode) {
+        const bareMatch = text.match(/(?:^|[^\d])((?:\d[\s-]*){6})(?:[^\d]|$)/);
+        const code = bareMatch ? normalizeDigits(bareMatch[1]) : '';
+        if (code) {
+          return code;
+        }
+      }
+      return '';
+    }
+
+    function collectCustomEmailVerificationTextCandidates(payload) {
+      const prioritized = [];
+      const fallback = [];
+      const visited = new Set();
+      const priorityKeyPattern = /(?:message|sms|body|text|content|mail|email|subject|snippet|code|otp|verification)/i;
+      const metadataKeyPattern = /(?:order|id|phone|time|date|expire|created|updated|status|count|timestamp)/i;
+
+      function visit(value, key = '') {
+        if (value === null || value === undefined) {
+          return;
+        }
+        if (typeof value === 'string' || typeof value === 'number') {
+          const text = String(value || '').trim();
+          if (!text) {
+            return;
+          }
+          if (priorityKeyPattern.test(key)) {
+            prioritized.push({ key, text });
+          } else if (!metadataKeyPattern.test(key)) {
+            fallback.push({ key, text });
+          }
+          return;
+        }
+        if (typeof value !== 'object') {
+          return;
+        }
+        if (visited.has(value)) {
+          return;
+        }
+        visited.add(value);
+        const entries = Array.isArray(value)
+          ? value.map((entry, index) => [String(index), entry])
+          : Object.entries(value);
+        for (const [childKey, childValue] of entries) {
+          visit(childValue, childKey);
+        }
+      }
+
+      visit(payload, '');
+      return [...prioritized, ...fallback];
+    }
+
+    function extractCustomEmailVerificationCode(payload) {
+      if (typeof payload === 'string' || typeof payload === 'number') {
+        return extractCodeFromText(payload, { allowBareCode: true });
+      }
+      for (const candidate of collectCustomEmailVerificationTextCandidates(payload)) {
+        const allowBareCode = /(?:code|otp|verification)/i.test(candidate.key);
+        const code = extractCodeFromText(candidate.text, { allowBareCode });
+        if (code) {
+          return code;
+        }
+      }
+      return '';
+    }
+
+    function parseCustomEmailVerificationPayloadText(text = '') {
+      const rawText = String(text || '').trim();
+      if (!rawText) {
+        return '';
+      }
+      try {
+        return JSON.parse(rawText);
+      } catch {
+        return rawText;
+      }
+    }
+
+    function describeCustomEmailVerificationPayload(payload) {
+      if (typeof payload === 'string') {
+        return payload.slice(0, 160);
+      }
+      try {
+        return JSON.stringify(payload).slice(0, 160);
+      } catch {
+        return '';
+      }
     }
 
     function isIcloudMail(mail) {
@@ -1327,6 +1528,109 @@
       return result || {};
     }
 
+    async function fetchCustomEmailVerificationCode(step, state = {}, options = {}) {
+      const targetEmail = normalizeEmailForComparison(
+        options.targetEmail
+        || state?.step8VerificationTargetEmail
+        || state?.boundEmail
+        || state?.email
+      );
+      const entry = getCustomEmailVerificationEntry(state, targetEmail);
+      const verificationUrl = String(entry?.verificationUrl || '').trim();
+      if (!verificationUrl) {
+        return {
+          handled: false,
+          targetEmail,
+        };
+      }
+
+      const fetcher = typeof fetchImpl === 'function'
+        ? fetchImpl
+        : (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+      if (typeof fetcher !== 'function') {
+        throw new Error(`步骤 ${step}：当前运行环境不支持 fetch，无法通过自定义邮箱取码 URL 获取验证码。`);
+      }
+
+      await addLog(`步骤 ${step}：正在通过自定义邮箱取码 URL 获取${getVerificationCodeLabel(step)}验证码。`, 'info');
+      const response = await fetcher(verificationUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json,text/plain,*/*',
+          'Cache-Control': 'no-cache, no-store, max-age=0',
+          Pragma: 'no-cache',
+        },
+      });
+      const text = await response.text().catch(() => '');
+      const payload = parseCustomEmailVerificationPayloadText(text);
+      if (!response.ok) {
+        const detail = describeCustomEmailVerificationPayload(payload);
+        throw new Error(`步骤 ${step}：自定义邮箱取码 URL 请求失败，HTTP ${response.status}${detail ? `：${detail}` : ''}`);
+      }
+
+      const code = extractCustomEmailVerificationCode(payload);
+      if (!code) {
+        const detail = describeCustomEmailVerificationPayload(payload);
+        throw new Error(`步骤 ${step}：自定义邮箱取码 URL 暂未返回有效验证码${detail ? `：${detail}` : ''}`);
+      }
+
+      await addLog(`步骤 ${step}：已通过自定义邮箱取码 URL 获取${getVerificationCodeLabel(step)}验证码：${code}`, 'ok');
+      return {
+        handled: true,
+        code,
+        emailTimestamp: Date.now(),
+        targetEmail,
+        verificationUrl,
+      };
+    }
+
+    async function resolveCustomEmailVerificationStep(step, state = {}, options = {}) {
+      const completionStep = getCompletionStep(step, options);
+      activeVerificationLogStep = completionStep;
+      const result = await fetchCustomEmailVerificationCode(step, state, options);
+      if (!result?.handled) {
+        return {
+          handled: false,
+        };
+      }
+
+      throwIfStopped();
+      const submitResult = await submitVerificationCode(step, result.code, options);
+      if (submitResult.invalidCode) {
+        throw new Error(`步骤 ${completionStep}：自定义邮箱取码 URL 返回的验证码被页面拒绝：${submitResult.errorText || result.code}`);
+      }
+
+      const stateKey = getVerificationCodeStateKey(step);
+      await setState({
+        lastEmailTimestamp: result.emailTimestamp,
+        [stateKey]: result.code,
+      });
+
+      const completionNodeId = await getNodeIdForStep(completionStep);
+      if (!completionNodeId) {
+        throw new Error(`步骤 ${completionStep} 未映射到验证码节点。`);
+      }
+      await completeNodeFromBackground(completionNodeId, {
+        emailTimestamp: result.emailTimestamp,
+        code: result.code,
+        phoneVerificationRequired: Boolean(submitResult.addPhonePage),
+        ...(step === 4 && submitResult?.skipProfileStep ? { skipProfileStep: true } : {}),
+        ...(step === 4 && submitResult?.skipProfileStepReason
+          ? { skipProfileStepReason: submitResult.skipProfileStepReason }
+          : {}),
+      });
+
+      return {
+        handled: true,
+        code: result.code,
+        emailTimestamp: result.emailTimestamp,
+        phoneVerificationRequired: Boolean(submitResult.addPhonePage),
+        url: submitResult.url || '',
+        verificationUrl: result.verificationUrl,
+      };
+    }
+
     async function resolveVerificationStep(step, state, mail, options = {}) {
       const completionStep = getCompletionStep(step, options);
       activeVerificationLogStep = completionStep;
@@ -1510,8 +1814,16 @@
         pollFreshVerificationCode,
         pollFreshVerificationCodeWithResendInterval,
         requestVerificationCodeResend,
+        resolveCustomEmailVerificationStep,
         resolveVerificationStep,
         submitVerificationCode,
+        __test: {
+          extractCustomEmailVerificationCode,
+          fetchCustomEmailVerificationCode,
+          getCustomEmailVerificationEntry,
+          normalizeCustomEmailVerificationUrl,
+          parseCustomEmailPoolEntryValue,
+        },
       };
     }
 
