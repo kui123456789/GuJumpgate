@@ -326,22 +326,7 @@
       return firstResult;
     }
 
-    async function readCurrentChatGptSession(tabId, visibleStep) {
-      await waitForTabCompleteUntilStopped(tabId, {
-        timeoutMs: SESSION_TAB_COMPLETE_TIMEOUT_MS,
-        retryDelayMs: 300,
-      });
-      await sleepWithStop(500);
-      await ensureContentScriptReadyOnTabUntilStopped(CHATGPT_SOURCE, tabId, {
-        inject: CHATGPT_INJECT_FILES,
-        injectSource: CHATGPT_SOURCE,
-        timeoutMs: SESSION_CONTENT_READY_TIMEOUT_MS,
-        retryDelayMs: 700,
-        logMessage: `步骤 ${visibleStep}：正在等待 ChatGPT 会话页完成加载，再继续读取 Pix 兑换 accessToken...`,
-      });
-
-      const sessionResult = await readSessionWithContentMessage(tabId)
-        || await readSessionWithScripting(tabId);
+    function extractSessionState(sessionResult) {
       const session = sessionResult?.session && typeof sessionResult.session === 'object' && !Array.isArray(sessionResult.session)
         ? sessionResult.session
         : null;
@@ -351,13 +336,59 @@
         || session?.accessToken
         || session?.access_token
       );
-      if (!accessToken) {
-        throw new Error(`步骤 ${visibleStep}：未读取到 ChatGPT accessToken，请确认当前 ChatGPT / OpenAI 标签页仍处于已登录状态。`);
-      }
       return {
         session,
         accessToken,
       };
+    }
+
+    async function readCurrentChatGptSession(tabId, visibleStep) {
+      await waitForTabCompleteUntilStopped(tabId, {
+        timeoutMs: SESSION_TAB_COMPLETE_TIMEOUT_MS,
+        retryDelayMs: 300,
+      });
+      await sleepWithStop(500);
+      let contentError = null;
+      try {
+        await ensureContentScriptReadyOnTabUntilStopped(CHATGPT_SOURCE, tabId, {
+          inject: CHATGPT_INJECT_FILES,
+          injectSource: CHATGPT_SOURCE,
+          timeoutMs: SESSION_CONTENT_READY_TIMEOUT_MS,
+          retryDelayMs: 700,
+          logMessage: `步骤 ${visibleStep}：正在等待 ChatGPT 会话页完成加载，再继续读取 Pix 兑换 accessToken...`,
+        });
+        const contentState = extractSessionState(await readSessionWithContentMessage(tabId));
+        if (contentState.accessToken) {
+          return contentState;
+        }
+        contentError = new Error('内容脚本没有返回 accessToken。');
+      } catch (error) {
+        contentError = error;
+        await addStepLog(visibleStep, `内容脚本读取 Pix accessToken 失败，改用 /api/auth/session 读取：${getErrorMessage(error) || '未知错误'}`, 'warn');
+      }
+
+      let scriptingError = null;
+      try {
+        const scriptingState = extractSessionState(await readSessionWithScripting(tabId));
+        if (scriptingState.accessToken) {
+          return scriptingState;
+        }
+      } catch (error) {
+        scriptingError = error;
+      }
+
+      if (contentError || scriptingError) {
+        const parts = [];
+        if (contentError) {
+          parts.push(`内容脚本：${getErrorMessage(contentError) || '未知错误'}`);
+        }
+        if (scriptingError) {
+          parts.push(`/api/auth/session：${getErrorMessage(scriptingError) || '未知错误'}`);
+        }
+        throw new Error(`步骤 ${visibleStep}：未读取到 ChatGPT accessToken，请确认当前 ChatGPT / OpenAI 标签页仍处于已登录状态。${parts.length ? `（${parts.join('；')}）` : ''}`);
+      }
+
+      throw new Error(`步骤 ${visibleStep}：未读取到 ChatGPT accessToken，请确认当前 ChatGPT / OpenAI 标签页仍处于已登录状态。`);
     }
 
     async function readResponseBody(response) {
