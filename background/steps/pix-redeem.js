@@ -80,6 +80,30 @@
       return `${baseUrl}/api/external/cdkey-redeems`;
     }
 
+    function buildPixAccessTokenCheckApiUrl(value = '') {
+      const baseUrl = normalizePixRedeemApiBaseUrl(value);
+      if (!baseUrl) {
+        throw new Error('Pix API Base URL 未配置，请先在侧边栏填写 Pix API 地址。');
+      }
+      return `${baseUrl}/api/external/access-token/check`;
+    }
+
+    function createPixRedeemClientId() {
+      const stamp = Math.max(1, Math.floor(Number(now()) || Date.now())).toString(36);
+      const randomPart = Math.random().toString(36).slice(2, 10) || 'local';
+      return `gujumpgate-${stamp}-${randomPart}`;
+    }
+
+    async function resolvePixRedeemClientId(state = {}) {
+      const existing = normalizeString(state?.pixRedeemClientId);
+      if (existing) {
+        return existing;
+      }
+      const generated = createPixRedeemClientId();
+      await setState({ pixRedeemClientId: generated });
+      return generated;
+    }
+
     function parseCdkeyPoolText(value = '') {
       const seen = new Set();
       return String(value || '')
@@ -439,6 +463,75 @@
       return '';
     }
 
+    function getPayloadItems(payload) {
+      if (Array.isArray(payload?.data?.items)) {
+        return payload.data.items;
+      }
+      if (Array.isArray(payload?.items)) {
+        return payload.items;
+      }
+      if (Array.isArray(payload?.data)) {
+        return payload.data;
+      }
+      return [];
+    }
+
+    function normalizeBoolean(value) {
+      if (value === true || value === 1) {
+        return true;
+      }
+      const normalized = normalizeString(value).toLowerCase();
+      return ['true', '1', 'yes', 'y', 'ok'].includes(normalized);
+    }
+
+    function getEligibilityItem(payload, cdkey) {
+      const target = normalizeString(cdkey).toLowerCase();
+      return getPayloadItems(payload).find((item) => {
+        const itemCdkey = normalizeString(item?.cdkey || item?.cdk).toLowerCase();
+        return itemCdkey && itemCdkey === target;
+      }) || null;
+    }
+
+    function getEligibilityFailureMessage(item) {
+      if (!item) {
+        return 'Pix 资格检查未返回当前卡密结果。';
+      }
+      if (!normalizeBoolean(item.token_ok ?? item.tokenOk)) {
+        return normalizeString(item.message || 'access_token 无效或已过期');
+      }
+      if (!normalizeBoolean(item.eligible)) {
+        return normalizeString(item.message || '账号无资格');
+      }
+      return '';
+    }
+
+    function isFailureStatus(status) {
+      return ['failed', 'failure', 'timeout', 'rejected', 'cancelled', 'canceled', 'error'].includes(
+        normalizeString(status).toLowerCase()
+      );
+    }
+
+    function getRedeemItemFailureMessage(payload, cdkey) {
+      const item = getEligibilityItem(payload, cdkey);
+      if (!item) {
+        return '';
+      }
+      const status = item.status || item.state || item.result || item.external_status || item.externalStatus;
+      if (!isFailureStatus(status) && !item.error && !item.error_code && !item.errorCode) {
+        return '';
+      }
+      return normalizeString(
+        item.message
+        || item.error
+        || item.error_message
+        || item.errorMessage
+        || item.error_code
+        || item.errorCode
+        || status
+        || 'Pix 兑换接口返回失败。'
+      );
+    }
+
     function getResponseContentType(response) {
       try {
         return normalizeString(response?.headers?.get?.('content-type')).toLowerCase();
@@ -458,7 +551,7 @@
       return /^\s*(?:<!doctype\s+html\b|<html[\s>]|<head[\s>]|<body[\s>])/i.test(payload);
     }
 
-    async function postPixRedeem({ apiUrl, externalApiKey, cdkey, accessToken }) {
+    async function postPixJson({ apiUrl, externalApiKey, clientId, body }) {
       if (typeof fetchImpl !== 'function') {
         throw new Error('当前运行环境不支持 fetch，无法请求 Pix 兑换接口。');
       }
@@ -471,11 +564,10 @@
           method: 'POST',
           headers: {
             'X-External-Api-Key': externalApiKey,
+            'X-Client-Id': clientId,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            items: [{ cdkey, access_token: accessToken }],
-          }),
+          body: JSON.stringify(body),
           ...(controller ? { signal: controller.signal } : {}),
         });
         const payload = await readResponseBody(response);
@@ -503,15 +595,50 @@
       }
     }
 
+    async function checkPixAccessTokenEligibility({ checkUrl, externalApiKey, clientId, cdkey, accessToken }) {
+      const payload = await postPixJson({
+        apiUrl: checkUrl,
+        externalApiKey,
+        clientId,
+        body: {
+          items: [{ cdkey, access_token: accessToken }],
+        },
+      });
+      const item = getEligibilityItem(payload, cdkey);
+      const failureMessage = getEligibilityFailureMessage(item);
+      if (failureMessage) {
+        throw new Error(`Pix 资格检查失败：${failureMessage}`);
+      }
+      return item;
+    }
+
+    async function postPixRedeem({ apiUrl, externalApiKey, clientId, cdkey, accessToken }) {
+      const payload = await postPixJson({
+        apiUrl,
+        externalApiKey,
+        clientId,
+        body: {
+          items: [{ cdkey, access_token: accessToken }],
+        },
+      });
+      const itemFailure = getRedeemItemFailureMessage(payload, cdkey);
+      if (itemFailure) {
+        throw new Error(`Pix 兑换接口返回错误：${itemFailure}`);
+      }
+      return payload;
+    }
+
     async function executePixRedeem(state = {}) {
       throwIfStopped();
       const runtimeState = await getMergedState(state);
       const visibleStep = resolveVisibleStep(runtimeState);
       const apiUrl = buildPixRedeemApiUrl(runtimeState?.pixRedeemApiBaseUrl);
+      const checkUrl = buildPixAccessTokenCheckApiUrl(runtimeState?.pixRedeemApiBaseUrl);
       const externalApiKey = normalizeString(runtimeState?.pixRedeemExternalApiKey);
       if (!externalApiKey) {
         throw new Error('Pix External API Key 未配置，请先在侧边栏填写 Pix 外部 API Key。');
       }
+      const clientId = await resolvePixRedeemClientId(runtimeState);
       const cdkeys = parseCdkeyPoolText(runtimeState?.pixRedeemCdkeyPoolText);
       const usage = normalizePixRedeemCdkeyUsage(runtimeState?.pixRedeemCdkeyUsage || {});
       const cdkey = pickFirstUnusedCdkey(cdkeys, usage);
@@ -529,11 +656,32 @@
       throwIfStopped();
 
       const attemptAt = Math.max(1, Math.floor(Number(now()) || Date.now()));
+      await addStepLog(visibleStep, `正在检查 Pix accessToken 资格：${cdkey} -> ${checkUrl}`, 'info');
+      try {
+        await checkPixAccessTokenEligibility({
+          checkUrl,
+          externalApiKey,
+          clientId,
+          cdkey,
+          accessToken: sessionState.accessToken,
+        });
+      } catch (error) {
+        const message = getErrorMessage(error) || 'Pix 资格检查失败。';
+        await addStepLog(visibleStep, `Pix 资格检查失败：${message}`, 'error');
+        await updateCdkeyUsage(cdkey, (entry) => ({
+          ...entry,
+          lastAttemptAt: attemptAt,
+          lastError: message,
+        }));
+        throw error;
+      }
+
       await addStepLog(visibleStep, `正在提交 Pix 卡密兑换：${cdkey} -> ${apiUrl}`, 'info');
       try {
         await postPixRedeem({
           apiUrl,
           externalApiKey,
+          clientId,
           cdkey,
           accessToken: sessionState.accessToken,
         });

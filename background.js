@@ -1257,6 +1257,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   hostedCheckoutSmsPoolAutoDisableEnabled: false,
   pixRedeemApiBaseUrl: '',
   pixRedeemExternalApiKey: '',
+  pixRedeemClientId: '',
   pixRedeemCdkeyPoolText: '',
   pixRedeemCdkeyUsage: {},
   chatGptApiSmsPoolText: '',
@@ -4183,6 +4184,8 @@ function normalizePersistentSettingValue(key, value) {
         .replace(/\/api\/external\/cdkey-redeems$/i, '')
         .replace(/\/+$/g, '');
     case 'pixRedeemExternalApiKey':
+      return String(value || '').trim();
+    case 'pixRedeemClientId':
       return String(value || '').trim();
     case 'pixRedeemCdkeyPoolText': {
       const seen = new Set();

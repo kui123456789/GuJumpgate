@@ -585,6 +585,12 @@
             title="显示 Pix API Key"></button>
         </div>
       </div>
+      <div class="data-row" id="row-pix-redeem-client-id" style="display:none;">
+        <span class="data-label">Pix Client ID</span>
+        <input type="text" id="input-pix-redeem-client-id" class="data-input"
+          placeholder="可留空自动生成；填 cdk_redeem_client_id 可同步网页记录" autocomplete="off"
+          title="cdk 后台按 X-Client-Id 分组记录；填入 cdk 页面 localStorage 的 cdk_redeem_client_id 可让网页看到扩展提交记录" />
+      </div>
       <div class="data-row data-check-row" id="row-pix-redeem-cdkey-pool" style="display:none;">
         <span class="data-label">Pix 卡密池</span>
         <div class="hotmail-import-box">

@@ -42,6 +42,7 @@ function createHarness(overrides = {}) {
   let state = {
     pixRedeemApiBaseUrl: 'https://pix.example/',
     pixRedeemExternalApiKey: 'external-secret',
+    pixRedeemClientId: 'client-test-001',
     pixRedeemCdkeyPoolText: 'CDK-USED\nCDK-001\nCDK-002',
     pixRedeemCdkeyUsage: {
       'CDK-USED': { usedAt: 1690000000000, lastAttemptAt: 1690000000000, lastError: '' },
@@ -92,6 +93,14 @@ function createHarness(overrides = {}) {
       if (typeof overrides.fetchImpl === 'function') {
         return overrides.fetchImpl(url, options);
       }
+      if (String(url).endsWith('/api/external/access-token/check')) {
+        return createJsonResponse(200, {
+          success: true,
+          data: {
+            items: [{ cdkey: 'CDK-001', token_ok: true, eligible: true }],
+          },
+        });
+      }
       return createJsonResponse(200, { success: true });
     },
   });
@@ -108,12 +117,19 @@ test('pix redeem posts the first unused cdkey with the current access token', as
 
   await harness.executor.executePixRedeem({ nodeId: 'pix-redeem', visibleStep: 6 });
 
-  assert.equal(harness.calls.fetch.length, 1);
-  assert.equal(harness.calls.fetch[0].url, 'https://pix.example/api/external/cdkey-redeems');
+  assert.equal(harness.calls.fetch.length, 2);
+  assert.equal(harness.calls.fetch[0].url, 'https://pix.example/api/external/access-token/check');
   assert.equal(harness.calls.fetch[0].options.method, 'POST');
-  assert.equal(harness.calls.fetch[0].options.headers['X-External-Api-Key'], 'external-secret');
-  assert.equal(harness.calls.fetch[0].options.headers['Content-Type'], 'application/json');
+  assert.equal(harness.calls.fetch[0].options.headers['X-Client-Id'], 'client-test-001');
   assert.deepEqual(JSON.parse(harness.calls.fetch[0].options.body), {
+    items: [{ cdkey: 'CDK-001', access_token: 'access-token-001' }],
+  });
+  assert.equal(harness.calls.fetch[1].url, 'https://pix.example/api/external/cdkey-redeems');
+  assert.equal(harness.calls.fetch[1].options.method, 'POST');
+  assert.equal(harness.calls.fetch[1].options.headers['X-External-Api-Key'], 'external-secret');
+  assert.equal(harness.calls.fetch[1].options.headers['X-Client-Id'], 'client-test-001');
+  assert.equal(harness.calls.fetch[1].options.headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(harness.calls.fetch[1].options.body), {
     items: [{ cdkey: 'CDK-001', access_token: 'access-token-001' }],
   });
   assert.equal(harness.calls.messages[0].message.payload.includeAccessToken, true);
@@ -156,6 +172,9 @@ test('pix redeem falls back to /api/auth/session when the checkout content scrip
   assert.deepEqual(JSON.parse(harness.calls.fetch[0].options.body), {
     items: [{ cdkey: 'CDK-001', access_token: 'script-access-token' }],
   });
+  assert.deepEqual(JSON.parse(harness.calls.fetch[1].options.body), {
+    items: [{ cdkey: 'CDK-001', access_token: 'script-access-token' }],
+  });
   assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].usedAt, 1700000000000);
 });
 
@@ -172,7 +191,7 @@ test('pix redeem skips disabled cdkeys and uses the first enabled unused cdkey',
 
   await harness.executor.executePixRedeem({ nodeId: 'pix-redeem', visibleStep: 6 });
 
-  assert.deepEqual(JSON.parse(harness.calls.fetch[0].options.body), {
+  assert.deepEqual(JSON.parse(harness.calls.fetch[1].options.body), {
     items: [{ cdkey: 'CDK-001', access_token: 'access-token-001' }],
   });
   assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-DISABLED'].usedAt || 0, 0);
@@ -213,7 +232,15 @@ test('pix redeem validates required config, cdkey, and access token', async () =
 test('pix redeem does not mark cdkey used when redeem request fails', async () => {
   for (const status of [400, 500]) {
     const harness = createHarness({
-      fetchImpl: async () => createJsonResponse(status, { error: `HTTP ${status}` }),
+      fetchImpl: async (url) => {
+        if (String(url).endsWith('/api/external/access-token/check')) {
+          return createJsonResponse(200, {
+            success: true,
+            data: { items: [{ cdkey: 'CDK-001', token_ok: true, eligible: true }] },
+          });
+        }
+        return createJsonResponse(status, { error: `HTTP ${status}` });
+      },
     });
 
     await assert.rejects(
@@ -226,9 +253,79 @@ test('pix redeem does not mark cdkey used when redeem request fails', async () =
   }
 });
 
+test('pix redeem checks access token eligibility before posting redeem', async () => {
+  const harness = createHarness({
+    fetchImpl: async (url) => {
+      if (String(url).endsWith('/api/external/access-token/check')) {
+        return createJsonResponse(200, {
+          success: true,
+          data: {
+            items: [{
+              cdkey: 'CDK-001',
+              token_ok: true,
+              eligible: false,
+              message: '账号无资格',
+            }],
+          },
+        });
+      }
+      return createJsonResponse(200, { success: true });
+    },
+  });
+
+  await assert.rejects(
+    harness.executor.executePixRedeem({ visibleStep: 6 }),
+    /账号无资格/
+  );
+  assert.equal(harness.calls.fetch.length, 1);
+  assert.equal(harness.calls.fetch[0].url, 'https://pix.example/api/external/access-token/check');
+  assert.equal(harness.calls.fetch[0].options.headers['X-Client-Id'], 'client-test-001');
+  assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].usedAt || 0, 0);
+  assert.match(harness.getState().pixRedeemCdkeyUsage['CDK-001'].lastError, /账号无资格/);
+});
+
+test('pix redeem does not mark cdkey used when redeem payload item failed', async () => {
+  const harness = createHarness({
+    fetchImpl: async (url) => {
+      if (String(url).endsWith('/api/external/access-token/check')) {
+        return createJsonResponse(200, {
+          success: true,
+          data: { items: [{ cdkey: 'CDK-001', token_ok: true, eligible: true }] },
+        });
+      }
+      return createJsonResponse(200, {
+        success: true,
+        data: {
+          items: [{
+            cdkey: 'CDK-001',
+            status: 'failed',
+            message: 'CDK 不存在',
+          }],
+        },
+      });
+    },
+  });
+
+  await assert.rejects(
+    harness.executor.executePixRedeem({ visibleStep: 6 }),
+    /CDK 不存在/
+  );
+  assert.equal(harness.calls.fetch.length, 2);
+  assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].usedAt || 0, 0);
+  assert.match(harness.getState().pixRedeemCdkeyUsage['CDK-001'].lastError, /CDK 不存在/);
+});
+
 test('pix redeem rejects 2xx html responses as a wrong endpoint instead of marking used', async () => {
   const harness = createHarness({
-    fetchImpl: async () => createTextResponse(200, '<!doctype html><html><body>app</body></html>', 'text/html'),
+    fetchImpl: async (url) => {
+      if (String(url).endsWith('/api/external/access-token/check')) {
+        return createJsonResponse(200, {
+          success: true,
+          data: { items: [{ cdkey: 'CDK-001', token_ok: true, eligible: true }] },
+        });
+      }
+      return createTextResponse(200, '<!doctype html><html><body>app</body></html>', 'text/html');
+    },
   });
 
   await assert.rejects(
@@ -241,7 +338,13 @@ test('pix redeem rejects 2xx html responses as a wrong endpoint instead of marki
 
 test('pix redeem does not mark cdkey used on network errors', async () => {
   const harness = createHarness({
-    fetchImpl: async () => {
+    fetchImpl: async (url) => {
+      if (String(url).endsWith('/api/external/access-token/check')) {
+        return createJsonResponse(200, {
+          success: true,
+          data: { items: [{ cdkey: 'CDK-001', token_ok: true, eligible: true }] },
+        });
+      }
       throw new Error('fetch failed');
     },
   });

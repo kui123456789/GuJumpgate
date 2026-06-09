@@ -280,6 +280,8 @@ const inputPixRedeemApiBaseUrl = document.getElementById('input-pix-redeem-api-b
 const rowPixRedeemExternalApiKey = document.getElementById('row-pix-redeem-external-api-key');
 const inputPixRedeemExternalApiKey = document.getElementById('input-pix-redeem-external-api-key');
 const btnTogglePixRedeemExternalApiKey = document.getElementById('btn-toggle-pix-redeem-external-api-key');
+const rowPixRedeemClientId = document.getElementById('row-pix-redeem-client-id');
+const inputPixRedeemClientId = document.getElementById('input-pix-redeem-client-id');
 const rowPixRedeemCdkeyPool = document.getElementById('row-pix-redeem-cdkey-pool');
 const inputPixRedeemCdkeyPool = document.getElementById('input-pix-redeem-cdkey-pool');
 const pixRedeemCdkeyPoolSummary = document.getElementById('pix-redeem-cdkey-pool-summary');
@@ -5767,6 +5769,7 @@ function collectSettingsPayload() {
     plusCheckoutProfiles: nextPlusCheckoutProfiles,
     pixRedeemApiBaseUrl: String(inputPixRedeemApiBaseUrl?.value || '').trim(),
     pixRedeemExternalApiKey: String(inputPixRedeemExternalApiKey?.value || '').trim(),
+    pixRedeemClientId: String(inputPixRedeemClientId?.value || '').trim(),
     pixRedeemCdkeyPoolText: normalizePixRedeemCdkeyPoolTextValue(inputPixRedeemCdkeyPool?.value || ''),
     pixRedeemCdkeyUsage: normalizePixRedeemCdkeyUsageValue(latestState?.pixRedeemCdkeyUsage || {}),
     paypalEmail: String(currentPayPalAccount?.email || latestState?.paypalEmail || '').trim(),
@@ -12294,6 +12297,7 @@ function updatePlusModeUI() {
   [
     typeof rowPixRedeemApiBaseUrl !== 'undefined' ? rowPixRedeemApiBaseUrl : null,
     typeof rowPixRedeemExternalApiKey !== 'undefined' ? rowPixRedeemExternalApiKey : null,
+    typeof rowPixRedeemClientId !== 'undefined' ? rowPixRedeemClientId : null,
     typeof rowPixRedeemCdkeyPool !== 'undefined' ? rowPixRedeemCdkeyPool : null,
   ].forEach((row) => {
     if (!row) {
@@ -13354,6 +13358,9 @@ function applySettingsState(state) {
   }
   if (typeof inputPixRedeemExternalApiKey !== 'undefined' && inputPixRedeemExternalApiKey) {
     inputPixRedeemExternalApiKey.value = String(state?.pixRedeemExternalApiKey || '').trim();
+  }
+  if (typeof inputPixRedeemClientId !== 'undefined' && inputPixRedeemClientId) {
+    inputPixRedeemClientId.value = String(state?.pixRedeemClientId || '').trim();
   }
   if (typeof inputPixRedeemCdkeyPool !== 'undefined' && inputPixRedeemCdkeyPool) {
     inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(state?.pixRedeemCdkeyPoolText || '');
@@ -18178,6 +18185,7 @@ selectPlusPaymentMethod?.addEventListener('change', () => {
   inputGpcHelperPin,
   inputPixRedeemApiBaseUrl,
   inputPixRedeemExternalApiKey,
+  inputPixRedeemClientId,
   inputPixRedeemCdkeyPool,
   selectGoPayCountryCode,
   inputGoPayPhone,
@@ -21179,6 +21187,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (message.payload.pixRedeemExternalApiKey !== undefined && inputPixRedeemExternalApiKey) {
         inputPixRedeemExternalApiKey.value = String(message.payload.pixRedeemExternalApiKey || '').trim();
+      }
+      if (message.payload.pixRedeemClientId !== undefined && inputPixRedeemClientId) {
+        inputPixRedeemClientId.value = String(message.payload.pixRedeemClientId || '').trim();
       }
       if (message.payload.pixRedeemCdkeyPoolText !== undefined && inputPixRedeemCdkeyPool) {
         inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(message.payload.pixRedeemCdkeyPoolText);

@@ -86,6 +86,8 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     'row-pix-redeem-external-api-key',
     'input-pix-redeem-external-api-key',
     'btn-toggle-pix-redeem-external-api-key',
+    'row-pix-redeem-client-id',
+    'input-pix-redeem-client-id',
     'row-pix-redeem-cdkey-pool',
     'input-pix-redeem-cdkey-pool',
     'pix-redeem-cdkey-pool-summary',
@@ -113,6 +115,11 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     sidepanelJs,
     /pixRedeemExternalApiKey:\s*String\(inputPixRedeemExternalApiKey\?\.value\s*\|\|\s*''\)\.trim\(\)/,
     '保存配置时应写入 Pix External API Key'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemClientId:\s*String\(inputPixRedeemClientId\?\.value\s*\|\|\s*''\)\.trim\(\)/,
+    '保存配置时应写入 Pix Client ID'
   );
   assert.match(
     sidepanelJs,
