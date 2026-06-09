@@ -89,6 +89,7 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     'row-pix-redeem-cdkey-pool',
     'input-pix-redeem-cdkey-pool',
     'pix-redeem-cdkey-pool-summary',
+    'pix-redeem-cdkey-status-list',
   ].forEach((id) => {
     assert.match(sidepanelHtml, new RegExp(`id="${id}"`), `Pix 设置应包含 ${id}`);
   });
@@ -117,6 +118,21 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     sidepanelJs,
     /pixRedeemCdkeyPoolText:\s*normalizePixRedeemCdkeyPoolTextValue\(inputPixRedeemCdkeyPool\?\.value\s*\|\|\s*''\)/,
     '保存配置时应写入规范化后的 Pix 卡密池'
+  );
+  assert.match(
+    sidepanelJs,
+    /enabled:\s*item\.enabled\s*!==\s*false/,
+    'Pix 卡密 usage 应持久化启用状态，旧数据默认启用'
+  );
+  assert.match(
+    sidepanelJs,
+    /renderPixRedeemCdkeyStatusList/,
+    'Pix 卡密池应渲染可操作的启用/已用状态列表'
+  );
+  assert.match(
+    sidepanelHtml,
+    /启用[\s\S]*已用/,
+    'Pix 卡密池 UI 应展示启用和已用状态'
   );
 });
 

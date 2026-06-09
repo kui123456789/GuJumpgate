@@ -2055,6 +2055,47 @@ header {
   text-align: center;
 }
 
+.pix-redeem-cdkey-status-header {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 48px;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.pix-redeem-cdkey-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.pix-redeem-cdkey-status-item {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  padding: 8px;
+}
+
+.pix-redeem-cdkey-enabled-toggle {
+  justify-content: flex-start;
+}
+
+.pix-redeem-cdkey-text {
+  min-width: 0;
+  color: var(--text-primary);
+  word-break: break-all;
+  font-size: 12px;
+}
+
 .data-select {
   flex: 1;
   padding: 7px 10px;

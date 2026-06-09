@@ -283,6 +283,7 @@ const btnTogglePixRedeemExternalApiKey = document.getElementById('btn-toggle-pix
 const rowPixRedeemCdkeyPool = document.getElementById('row-pix-redeem-cdkey-pool');
 const inputPixRedeemCdkeyPool = document.getElementById('input-pix-redeem-cdkey-pool');
 const pixRedeemCdkeyPoolSummary = document.getElementById('pix-redeem-cdkey-pool-summary');
+const pixRedeemCdkeyStatusList = document.getElementById('pix-redeem-cdkey-status-list');
 const rowGoPayCountryCode = document.getElementById('row-gopay-country-code');
 const selectGoPayCountryCode = document.getElementById('select-gopay-country-code');
 const rowGoPayPhone = document.getElementById('row-gopay-phone');
@@ -2944,11 +2945,107 @@ function normalizePixRedeemCdkeyUsageValue(value = {}) {
       usedAt: Math.max(0, Number(item.usedAt) || 0),
       lastAttemptAt: Math.max(0, Number(item.lastAttemptAt) || 0),
       lastError: String(item.lastError || '').trim(),
+      enabled: item.enabled !== false,
     }];
   }).filter(([key]) => Boolean(key)));
 }
 
-function updatePixRedeemCdkeyPoolSummary(state = latestState) {
+function getDefaultPixRedeemCdkeyUsageEntry() {
+  return {
+    usedAt: 0,
+    lastAttemptAt: 0,
+    lastError: '',
+    enabled: true,
+  };
+}
+
+function getPixRedeemCdkeyUsageEntry(usage = {}, cdkey = '') {
+  return {
+    ...getDefaultPixRedeemCdkeyUsageEntry(),
+    ...(usage?.[cdkey] || {}),
+    enabled: usage?.[cdkey]?.enabled !== false,
+  };
+}
+
+function updatePixRedeemCdkeyEnabled(cdkey = '', enabled = true) {
+  const normalizedCdkey = String(cdkey || '').trim();
+  if (!normalizedCdkey) {
+    return;
+  }
+  const usage = normalizePixRedeemCdkeyUsageValue(latestState?.pixRedeemCdkeyUsage || {});
+  const currentEntry = getPixRedeemCdkeyUsageEntry(usage, normalizedCdkey);
+  const nextUsage = {
+    ...usage,
+    [normalizedCdkey]: {
+      ...currentEntry,
+      enabled: Boolean(enabled),
+    },
+  };
+  syncLatestState({ pixRedeemCdkeyUsage: nextUsage });
+  renderPixRedeemCdkeyStatusList(latestState);
+  updatePixRedeemCdkeyPoolSummary(latestState, { skipRender: true });
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+}
+
+function renderPixRedeemCdkeyStatusList(state = latestState) {
+  if (!pixRedeemCdkeyStatusList) {
+    return;
+  }
+  const poolText = inputPixRedeemCdkeyPool?.value ?? state?.pixRedeemCdkeyPoolText ?? '';
+  const cdkeys = parsePixRedeemCdkeyPoolTextValue(poolText);
+  const usage = normalizePixRedeemCdkeyUsageValue(state?.pixRedeemCdkeyUsage || {});
+  pixRedeemCdkeyStatusList.textContent = '';
+  if (!cdkeys.length) {
+    const empty = document.createElement('div');
+    empty.className = 'icloud-empty';
+    empty.textContent = '导入卡密后显示启用和已用状态';
+    pixRedeemCdkeyStatusList.appendChild(empty);
+    return;
+  }
+  cdkeys.forEach((cdkey) => {
+    const entry = getPixRedeemCdkeyUsageEntry(usage, cdkey);
+    const used = Number(entry.usedAt) > 0;
+    const enabled = entry.enabled !== false;
+    const item = document.createElement('div');
+    item.className = 'pix-redeem-cdkey-status-item';
+
+    const label = document.createElement('label');
+    label.className = 'toggle-switch pix-redeem-cdkey-enabled-toggle';
+    label.title = used ? '已用卡密不会再次选择' : '控制该 Pix 卡密是否参与自动兑换';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = enabled;
+    checkbox.disabled = used;
+    checkbox.setAttribute('aria-label', `启用 Pix 卡密 ${cdkey}`);
+    const track = document.createElement('span');
+    track.className = 'toggle-switch-track';
+    const thumb = document.createElement('span');
+    thumb.className = 'toggle-switch-thumb';
+    track.appendChild(thumb);
+    label.appendChild(checkbox);
+    label.appendChild(track);
+
+    const cdkeyText = document.createElement('span');
+    cdkeyText.className = 'pix-redeem-cdkey-text mono';
+    cdkeyText.textContent = cdkey;
+
+    const status = document.createElement('span');
+    status.className = `icloud-tag ${used ? 'used' : enabled ? 'active' : ''}`;
+    status.textContent = used ? '已用' : enabled ? '启用' : '停用';
+
+    checkbox.addEventListener('change', () => {
+      updatePixRedeemCdkeyEnabled(cdkey, checkbox.checked);
+    });
+
+    item.appendChild(label);
+    item.appendChild(cdkeyText);
+    item.appendChild(status);
+    pixRedeemCdkeyStatusList.appendChild(item);
+  });
+}
+
+function updatePixRedeemCdkeyPoolSummary(state = latestState, options = {}) {
   if (!pixRedeemCdkeyPoolSummary) {
     return;
   }
@@ -2956,7 +3053,15 @@ function updatePixRedeemCdkeyPoolSummary(state = latestState) {
   const cdkeys = parsePixRedeemCdkeyPoolTextValue(poolText);
   const usage = normalizePixRedeemCdkeyUsageValue(state?.pixRedeemCdkeyUsage || {});
   const usedCount = cdkeys.filter((cdkey) => Number(usage?.[cdkey]?.usedAt) > 0).length;
-  pixRedeemCdkeyPoolSummary.textContent = `总数 ${cdkeys.length} / 已用 ${usedCount} / 可用 ${Math.max(0, cdkeys.length - usedCount)}`;
+  const enabledCount = cdkeys.filter((cdkey) => getPixRedeemCdkeyUsageEntry(usage, cdkey).enabled !== false).length;
+  const availableCount = cdkeys.filter((cdkey) => {
+    const entry = getPixRedeemCdkeyUsageEntry(usage, cdkey);
+    return entry.enabled !== false && !Number(entry.usedAt);
+  }).length;
+  pixRedeemCdkeyPoolSummary.textContent = `总数 ${cdkeys.length} / 启用 ${enabledCount} / 已用 ${usedCount} / 可用 ${availableCount}`;
+  if (!options.skipRender) {
+    renderPixRedeemCdkeyStatusList(state);
+  }
 }
 
 function getSelectedPlusPaymentMethod(state = latestState) {

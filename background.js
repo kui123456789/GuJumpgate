@@ -4209,6 +4209,7 @@ function normalizePersistentSettingValue(key, value) {
           usedAt: Math.max(0, Number(item.usedAt) || 0),
           lastAttemptAt: Math.max(0, Number(item.lastAttemptAt) || 0),
           lastError: String(item.lastError || '').trim(),
+          enabled: item.enabled !== false,
         }];
       }).filter(([key]) => Boolean(key)));
     case 'hostedSmsPoolText':

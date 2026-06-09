@@ -112,19 +112,23 @@
           usedAt: Math.max(0, Math.floor(Number(entry.usedAt) || 0)),
           lastAttemptAt: Math.max(0, Math.floor(Number(entry.lastAttemptAt) || 0)),
           lastError: normalizeString(entry.lastError),
+          enabled: entry.enabled !== false,
         };
       });
       return result;
     }
 
     function pickFirstUnusedCdkey(cdkeys = [], usage = {}) {
-      return cdkeys.find((cdkey) => !Number(usage?.[cdkey]?.usedAt)) || '';
+      return cdkeys.find((cdkey) => {
+        const entry = usage?.[cdkey] || {};
+        return entry.enabled !== false && !Number(entry.usedAt);
+      }) || '';
     }
 
     async function updateCdkeyUsage(cdkey, updater) {
       const state = await getMergedState({});
       const usage = normalizePixRedeemCdkeyUsage(state?.pixRedeemCdkeyUsage || {});
-      const currentEntry = usage[cdkey] || { usedAt: 0, lastAttemptAt: 0, lastError: '' };
+      const currentEntry = usage[cdkey] || { usedAt: 0, lastAttemptAt: 0, lastError: '', enabled: true };
       const nextEntry = updater(currentEntry) || currentEntry;
       await setState({
         pixRedeemCdkeyUsage: {
@@ -133,6 +137,7 @@
             usedAt: Math.max(0, Math.floor(Number(nextEntry.usedAt) || 0)),
             lastAttemptAt: Math.max(0, Math.floor(Number(nextEntry.lastAttemptAt) || 0)),
             lastError: normalizeString(nextEntry.lastError),
+            enabled: nextEntry.enabled !== false,
           },
         },
       });

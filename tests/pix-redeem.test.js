@@ -136,6 +136,27 @@ test('pix redeem falls back to /api/auth/session when the checkout content scrip
   assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].usedAt, 1700000000000);
 });
 
+test('pix redeem skips disabled cdkeys and uses the first enabled unused cdkey', async () => {
+  const harness = createHarness({
+    state: {
+      pixRedeemCdkeyPoolText: 'CDK-USED\nCDK-DISABLED\nCDK-001',
+      pixRedeemCdkeyUsage: {
+        'CDK-USED': { usedAt: 1690000000000, lastAttemptAt: 1690000000000, lastError: '', enabled: true },
+        'CDK-DISABLED': { usedAt: 0, lastAttemptAt: 0, lastError: '', enabled: false },
+      },
+    },
+  });
+
+  await harness.executor.executePixRedeem({ nodeId: 'pix-redeem', visibleStep: 6 });
+
+  assert.deepEqual(JSON.parse(harness.calls.fetch[0].options.body), {
+    items: [{ cdkey: 'CDK-001', access_token: 'access-token-001' }],
+  });
+  assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-DISABLED'].usedAt || 0, 0);
+  assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-DISABLED'].enabled, false);
+  assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].enabled, true);
+});
+
 test('pix redeem validates required config, cdkey, and access token', async () => {
   await assert.rejects(
     createHarness({ state: { pixRedeemApiBaseUrl: '' } }).executor.executePixRedeem({ visibleStep: 6 }),
@@ -147,6 +168,17 @@ test('pix redeem validates required config, cdkey, and access token', async () =
   );
   await assert.rejects(
     createHarness({ state: { pixRedeemCdkeyPoolText: 'CDK-USED' } }).executor.executePixRedeem({ visibleStep: 6 }),
+    /没有可用的 Pix 卡密/
+  );
+  await assert.rejects(
+    createHarness({
+      state: {
+        pixRedeemCdkeyPoolText: 'CDK-DISABLED',
+        pixRedeemCdkeyUsage: {
+          'CDK-DISABLED': { usedAt: 0, lastAttemptAt: 0, lastError: '', enabled: false },
+        },
+      },
+    }).executor.executePixRedeem({ visibleStep: 6 }),
     /没有可用的 Pix 卡密/
   );
   await assert.rejects(
