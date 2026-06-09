@@ -90,6 +90,7 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     'row-pix-redeem-client-id',
     'input-pix-redeem-client-id',
     'row-pix-redeem-stop-after-redeem',
+    'select-pix-redeem-after-mode',
     'input-pix-redeem-stop-after-redeem',
     'row-pix-redeem-cdkey-pool',
     'input-pix-redeem-cdkey-pool',
@@ -111,17 +112,27 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
   );
   assert.match(
     sidepanelHtml,
-    /兑换后停止[\s\S]*不执行后续 OAuth/,
-    'Pix 设置应提供兑换后停止的选择'
+    /第6步后[\s\S]*停止[\s\S]*继续后续 OAuth/,
+    'Pix 设置应提供明显的第6步后停止/继续下拉选择'
   );
   assert.match(
     sidepanelJs,
-    /pixRedeemStopAfterRedeem:\s*Boolean\(inputPixRedeemStopAfterRedeem\?\.checked\)/,
-    '保存配置时应写入 Pix 兑换后停止开关'
+    /const\s+selectPixRedeemAfterMode\s*=\s*document\.getElementById\('select-pix-redeem-after-mode'\)/,
+    '侧栏应读取 Pix 第6步后模式下拉框'
   );
   assert.match(
     sidepanelJs,
-    /inputPixRedeemStopAfterRedeem\.checked\s*=\s*state\?\.pixRedeemContinueAfterRedeem\s*===\s*true\s*\?\s*false\s*:\s*true/,
+    /selectPixRedeemAfterMode\?\.value\s*===\s*'continue'/,
+    '保存配置时应根据第6步后下拉框判断是否继续后续 OAuth'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemStopAfterRedeem:\s*getSelectedPixRedeemStopAfterRedeem\(latestState\)/,
+    '保存配置时应从 Pix 第6步后下拉框写入停止开关'
+  );
+  assert.match(
+    sidepanelJs,
+    /syncPixRedeemAfterModeControls\(state\?\.pixRedeemContinueAfterRedeem\s*===\s*true\s*\?\s*false\s*:\s*true\)/,
     '恢复配置时应默认勾选 Pix 兑换后停止，只有明确继续后链才取消'
   );
   assert.match(
@@ -131,7 +142,7 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
   );
   assert.match(
     sidepanelJs,
-    /pixRedeemContinueAfterRedeem:\s*!Boolean\(inputPixRedeemStopAfterRedeem\?\.checked\)/,
+    /pixRedeemContinueAfterRedeem:\s*selectPixRedeemAfterMode\?\.value\s*===\s*'continue'/,
     '保存配置时应写入是否继续 Pix 后续 OAuth 后链'
   );
   assert.match(

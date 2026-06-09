@@ -283,6 +283,7 @@ const btnTogglePixRedeemExternalApiKey = document.getElementById('btn-toggle-pix
 const rowPixRedeemClientId = document.getElementById('row-pix-redeem-client-id');
 const inputPixRedeemClientId = document.getElementById('input-pix-redeem-client-id');
 const rowPixRedeemStopAfterRedeem = document.getElementById('row-pix-redeem-stop-after-redeem');
+const selectPixRedeemAfterMode = document.getElementById('select-pix-redeem-after-mode');
 const inputPixRedeemStopAfterRedeem = document.getElementById('input-pix-redeem-stop-after-redeem');
 const rowPixRedeemCdkeyPool = document.getElementById('row-pix-redeem-cdkey-pool');
 const inputPixRedeemCdkeyPool = document.getElementById('input-pix-redeem-cdkey-pool');
@@ -3135,11 +3136,53 @@ function getSelectedPlusPaymentMethod(state = latestState) {
   return normalizePlusPaymentMethod(selected || DEFAULT_PLUS_PAYMENT_METHOD);
 }
 
+function normalizePixRedeemAfterMode(value = '') {
+  return String(value || '').trim().toLowerCase() === 'continue' ? 'continue' : 'stop';
+}
+
+function syncPixRedeemAfterModeControls(stopAfterRedeem = true) {
+  const stop = stopAfterRedeem !== false;
+  if (typeof selectPixRedeemAfterMode !== 'undefined' && selectPixRedeemAfterMode) {
+    selectPixRedeemAfterMode.value = stop ? 'stop' : 'continue';
+  }
+  if (typeof inputPixRedeemStopAfterRedeem !== 'undefined' && inputPixRedeemStopAfterRedeem) {
+    inputPixRedeemStopAfterRedeem.checked = stop;
+  }
+  return stop;
+}
+
 function getSelectedPixRedeemStopAfterRedeem(state = latestState) {
+  if (typeof selectPixRedeemAfterMode !== 'undefined' && selectPixRedeemAfterMode) {
+    return normalizePixRedeemAfterMode(selectPixRedeemAfterMode.value) !== 'continue';
+  }
   if (typeof inputPixRedeemStopAfterRedeem !== 'undefined' && inputPixRedeemStopAfterRedeem) {
     return Boolean(inputPixRedeemStopAfterRedeem.checked);
   }
   return state?.pixRedeemContinueAfterRedeem === true ? false : true;
+}
+
+function syncPixRedeemAfterModeStepDefinitions() {
+  syncPixRedeemAfterModeControls(getSelectedPixRedeemStopAfterRedeem(latestState));
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...(latestState || {}),
+      plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
+      signupMethod: getSelectedSignupMethod(),
+    }, {
+      signupMethod: getSelectedSignupMethod(),
+    })
+    : {
+      plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
+      signupMethod: getSelectedSignupMethod(),
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
+    render: true,
+    plusPaymentMethod: getSelectedPlusPaymentMethod(),
+    signupMethod: stepDefinitionState.signupMethod,
+    plusAccountAccessStrategy: stepDefinitionState.plusAccountAccessStrategy,
+    pixRedeemStopAfterRedeem: getSelectedPixRedeemStopAfterRedeem(latestState),
+    pixRedeemContinueAfterRedeem: selectPixRedeemAfterMode?.value === 'continue',
+  });
 }
 
 function normalizePlusCheckoutModeValue(value = '') {
@@ -5809,8 +5852,8 @@ function collectSettingsPayload() {
     pixRedeemApiBaseUrl: String(inputPixRedeemApiBaseUrl?.value || '').trim(),
     pixRedeemExternalApiKey: String(inputPixRedeemExternalApiKey?.value || '').trim(),
     pixRedeemClientId: String(inputPixRedeemClientId?.value || '').trim(),
-    pixRedeemStopAfterRedeem: Boolean(inputPixRedeemStopAfterRedeem?.checked),
-    pixRedeemContinueAfterRedeem: !Boolean(inputPixRedeemStopAfterRedeem?.checked),
+    pixRedeemStopAfterRedeem: getSelectedPixRedeemStopAfterRedeem(latestState),
+    pixRedeemContinueAfterRedeem: selectPixRedeemAfterMode?.value === 'continue',
     pixRedeemCdkeyPoolText: normalizePixRedeemCdkeyPoolTextValue(inputPixRedeemCdkeyPool?.value || ''),
     pixRedeemCdkeyUsage: normalizePixRedeemCdkeyUsageValue(latestState?.pixRedeemCdkeyUsage || {}),
     paypalEmail: String(currentPayPalAccount?.email || latestState?.paypalEmail || '').trim(),
@@ -13419,9 +13462,7 @@ function applySettingsState(state) {
   if (typeof inputPixRedeemClientId !== 'undefined' && inputPixRedeemClientId) {
     inputPixRedeemClientId.value = String(state?.pixRedeemClientId || '').trim();
   }
-  if (typeof inputPixRedeemStopAfterRedeem !== 'undefined' && inputPixRedeemStopAfterRedeem) {
-    inputPixRedeemStopAfterRedeem.checked = state?.pixRedeemContinueAfterRedeem === true ? false : true;
-  }
+  syncPixRedeemAfterModeControls(state?.pixRedeemContinueAfterRedeem === true ? false : true);
   if (typeof inputPixRedeemCdkeyPool !== 'undefined' && inputPixRedeemCdkeyPool) {
     inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(state?.pixRedeemCdkeyPoolText || '');
   }
@@ -18249,6 +18290,7 @@ selectPlusPaymentMethod?.addEventListener('change', () => {
   inputPixRedeemApiBaseUrl,
   inputPixRedeemExternalApiKey,
   inputPixRedeemClientId,
+  selectPixRedeemAfterMode,
   inputPixRedeemStopAfterRedeem,
   inputPixRedeemCdkeyPool,
   selectGoPayCountryCode,
@@ -18260,31 +18302,16 @@ selectPlusPaymentMethod?.addEventListener('change', () => {
     if (input === inputPixRedeemCdkeyPool) {
       updatePixRedeemCdkeyPoolSummary(latestState);
     }
-    if (input === inputPixRedeemStopAfterRedeem) {
-      const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
-        ? resolveStepDefinitionCapabilityState({
-          ...(latestState || {}),
-          plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
-          signupMethod: getSelectedSignupMethod(),
-        }, {
-          signupMethod: getSelectedSignupMethod(),
-        })
-        : {
-          plusModeEnabled: Boolean(inputPlusModeEnabled?.checked),
-          signupMethod: getSelectedSignupMethod(),
-        };
-      syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
-        render: true,
-        plusPaymentMethod: getSelectedPlusPaymentMethod(),
-        signupMethod: stepDefinitionState.signupMethod,
-        plusAccountAccessStrategy: stepDefinitionState.plusAccountAccessStrategy,
-        pixRedeemStopAfterRedeem: Boolean(inputPixRedeemStopAfterRedeem.checked),
-      });
+    if (input === selectPixRedeemAfterMode || input === inputPixRedeemStopAfterRedeem) {
+      syncPixRedeemAfterModeStepDefinitions();
     }
     markSettingsDirty(true);
     scheduleSettingsAutoSave();
   });
   input?.addEventListener('change', () => {
+    if (input === selectPixRedeemAfterMode || input === inputPixRedeemStopAfterRedeem) {
+      syncPixRedeemAfterModeStepDefinitions();
+    }
     if (input === selectGpcHelperPhoneMode || input === selectGpcHelperOtpChannel || input === inputGpcHelperLocalSmsEnabled) {
       updatePlusModeUI();
     }
@@ -21284,7 +21311,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           || message.payload.pixRedeemContinueAfterRedeem !== undefined)
         && inputPixRedeemStopAfterRedeem
       ) {
-        inputPixRedeemStopAfterRedeem.checked = message.payload.pixRedeemContinueAfterRedeem === true ? false : true;
+        syncPixRedeemAfterModeControls(message.payload.pixRedeemContinueAfterRedeem === true ? false : true);
       }
       if (message.payload.pixRedeemCdkeyPoolText !== undefined && inputPixRedeemCdkeyPool) {
         inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(message.payload.pixRedeemCdkeyPoolText);

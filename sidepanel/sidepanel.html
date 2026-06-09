@@ -591,15 +591,14 @@
           placeholder="可留空自动生成；填 cdk_redeem_client_id 可同步网页记录" autocomplete="off"
           title="cdk 后台按 X-Client-Id 分组记录；填入 cdk 页面 localStorage 的 cdk_redeem_client_id 可让网页看到扩展提交记录" />
       </div>
-      <div class="data-row data-check-row" id="row-pix-redeem-stop-after-redeem" style="display:none;">
-        <span class="data-label">兑换后停止</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="input-pix-redeem-stop-after-redeem" />
-          <span class="toggle-switch-track" aria-hidden="true">
-            <span class="toggle-switch-thumb"></span>
-          </span>
-        </label>
-        <span class="setting-caption">Pix 卡密兑换成功后结束流程，不执行后续 OAuth、验证码和平台回调</span>
+      <div class="data-row" id="row-pix-redeem-stop-after-redeem" style="display:none;">
+        <span class="data-label">第6步后</span>
+        <select id="select-pix-redeem-after-mode" class="data-select">
+          <option value="stop" selected>停止</option>
+          <option value="continue">继续后续 OAuth</option>
+        </select>
+        <input type="checkbox" id="input-pix-redeem-stop-after-redeem" hidden checked />
+        <span class="setting-caption">选择继续后会执行 OAuth、验证码和平台回调</span>
       </div>
       <div class="data-row data-check-row" id="row-pix-redeem-cdkey-pool" style="display:none;">
         <span class="data-label">Pix 卡密池</span>
