@@ -14,10 +14,10 @@
 
 ## 当前版本建议
 
-- 当前待发布版本：`v0.1.9`
-- 当前扩展版本号：`0.1.9`
-- Release 文案文件：`docs/releases/v0.1.9.md`
-- GitHub Release 正文可直接复制 `docs/releases/v0.1.9.md`
+- 当前待发布版本：`v0.1.10`
+- 当前扩展版本号：`0.1.10`
+- Release 文案文件：`docs/releases/v0.1.10.md`
+- GitHub Release 正文可直接复制 `docs/releases/v0.1.10.md`
 
 ## 首次发布
 
@@ -43,11 +43,11 @@ git push -u origin main
 
 ```powershell
 git status
-git add manifest.json sidepanel/sidepanel.html sidepanel/update-service.js sidepanel/sidepanel.js docs/releases/v0.1.9.md RELEASING.md
-git commit -m "Prepare v0.1.9 release"
-git tag -a v0.1.9 -m "GuJumpgate v0.1.9"
+git add manifest.json sidepanel/sidepanel.html sidepanel/update-service.js sidepanel/sidepanel.js docs/releases/v0.1.10.md RELEASING.md
+git commit -m "Prepare v0.1.10 release"
+git tag -a v0.1.10 -m "GuJumpgate v0.1.10"
 git push origin main
-git push origin v0.1.9
+git push origin v0.1.10
 ```
 
 ## Release 说明建议
