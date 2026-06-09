@@ -187,6 +187,11 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
   );
   assert.match(
     sidepanelJs,
+    /if\s*\([\s\S]{0,240}inputPixRedeemCdkeyPool[\s\S]{0,240}&&\s*!shouldPreserveFocusedPixRedeemCdkeyPoolEdit\(\)[\s\S]{0,240}\)\s*{\s*inputPixRedeemCdkeyPool\.value\s*=\s*normalizePixRedeemCdkeyPoolTextValue\(state\?\.pixRedeemCdkeyPoolText\s*\|\|\s*''\)/,
+    '恢复配置时也不能覆盖正在编辑的 Pix 卡密池，避免回车换行被规范化回写吃掉'
+  );
+  assert.match(
+    sidepanelJs,
     /enabled:\s*item\.enabled\s*!==\s*false/,
     'Pix 卡密 usage 应持久化启用状态，旧数据默认启用'
   );

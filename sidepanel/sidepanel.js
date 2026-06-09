@@ -13471,7 +13471,11 @@ function applySettingsState(state) {
     inputPixRedeemClientId.value = String(state?.pixRedeemClientId || '').trim();
   }
   syncPixRedeemAfterModeControls(state?.pixRedeemContinueAfterRedeem === true ? false : true);
-  if (typeof inputPixRedeemCdkeyPool !== 'undefined' && inputPixRedeemCdkeyPool) {
+  if (
+    typeof inputPixRedeemCdkeyPool !== 'undefined'
+    && inputPixRedeemCdkeyPool
+    && !shouldPreserveFocusedPixRedeemCdkeyPoolEdit()
+  ) {
     inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(state?.pixRedeemCdkeyPoolText || '');
   }
   updatePixRedeemCdkeyPoolSummary(state);
