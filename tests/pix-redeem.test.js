@@ -9,11 +9,31 @@ function createJsonResponse(status, payload = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: {
+      get(name = '') {
+        return String(name || '').toLowerCase() === 'content-type' ? 'application/json' : '';
+      },
+    },
     async json() {
       return payload;
     },
     async text() {
       return JSON.stringify(payload);
+    },
+  };
+}
+
+function createTextResponse(status, body = '', contentType = 'text/plain') {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get(name = '') {
+        return String(name || '').toLowerCase() === 'content-type' ? contentType : '';
+      },
+    },
+    async text() {
+      return body;
     },
   };
 }
@@ -33,6 +53,7 @@ function createHarness(overrides = {}) {
     fetch: [],
     setState: [],
     complete: [],
+    logs: [],
     messages: [],
   };
   const tab = overrides.tab || { id: 123, url: 'https://chatgpt.com/' };
@@ -54,7 +75,9 @@ function createHarness(overrides = {}) {
     completeNodeFromBackground: async (nodeId, payload) => {
       calls.complete.push({ nodeId, payload });
     },
-    addLog: async () => {},
+    addLog: async (message, level, options) => {
+      calls.logs.push({ message, level, options });
+    },
     getTabId: async () => 123,
     isTabAlive: async () => true,
     registerTab: async () => {},
@@ -201,6 +224,19 @@ test('pix redeem does not mark cdkey used when redeem request fails', async () =
     assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].lastAttemptAt, 1700000000000);
     assert.match(harness.getState().pixRedeemCdkeyUsage['CDK-001'].lastError, new RegExp(String(status)));
   }
+});
+
+test('pix redeem rejects 2xx html responses as a wrong endpoint instead of marking used', async () => {
+  const harness = createHarness({
+    fetchImpl: async () => createTextResponse(200, '<!doctype html><html><body>app</body></html>', 'text/html'),
+  });
+
+  await assert.rejects(
+    harness.executor.executePixRedeem({ visibleStep: 6 }),
+    /返回了 HTML|API Base URL|路由/
+  );
+  assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].usedAt || 0, 0);
+  assert.match(harness.getState().pixRedeemCdkeyUsage['CDK-001'].lastError, /HTML|Base URL|路由/);
 });
 
 test('pix redeem does not mark cdkey used on network errors', async () => {

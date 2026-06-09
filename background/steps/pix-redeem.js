@@ -439,6 +439,25 @@
       return '';
     }
 
+    function getResponseContentType(response) {
+      try {
+        return normalizeString(response?.headers?.get?.('content-type')).toLowerCase();
+      } catch {
+        return '';
+      }
+    }
+
+    function isHtmlResponsePayload(response, payload) {
+      const contentType = getResponseContentType(response);
+      if (contentType.includes('text/html')) {
+        return true;
+      }
+      if (typeof payload !== 'string') {
+        return false;
+      }
+      return /^\s*(?:<!doctype\s+html\b|<html[\s>]|<head[\s>]|<body[\s>])/i.test(payload);
+    }
+
     async function postPixRedeem({ apiUrl, externalApiKey, cdkey, accessToken }) {
       if (typeof fetchImpl !== 'function') {
         throw new Error('当前运行环境不支持 fetch，无法请求 Pix 兑换接口。');
@@ -467,6 +486,9 @@
         const payloadError = getPayloadError(payload);
         if (payloadError) {
           throw new Error(`Pix 兑换接口返回错误：${payloadError}`);
+        }
+        if (isHtmlResponsePayload(response, payload)) {
+          throw new Error('Pix 兑换接口返回了 HTML 页面，可能 Pix API Base URL 填错，或后端没有 /api/external/cdkey-redeems 路由。');
         }
         return payload;
       } catch (error) {
@@ -507,7 +529,7 @@
       throwIfStopped();
 
       const attemptAt = Math.max(1, Math.floor(Number(now()) || Date.now()));
-      await addStepLog(visibleStep, `正在提交 Pix 卡密兑换：${cdkey}`, 'info');
+      await addStepLog(visibleStep, `正在提交 Pix 卡密兑换：${cdkey} -> ${apiUrl}`, 'info');
       try {
         await postPixRedeem({
           apiUrl,
@@ -524,6 +546,7 @@
         await completeNodeFromBackground(state?.nodeId || 'pix-redeem', { cdkey });
       } catch (error) {
         const message = getErrorMessage(error) || 'Pix 卡密兑换失败。';
+        await addStepLog(visibleStep, `Pix 卡密兑换失败：${message}`, 'error');
         await updateCdkeyUsage(cdkey, (entry) => ({
           ...entry,
           lastAttemptAt: attemptAt,
