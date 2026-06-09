@@ -86,6 +86,7 @@ function createHarness(overrides = {}) {
     fetch: [],
     setState: [],
     complete: [],
+    markAccountUsed: [],
     logs: [],
     messages: [],
   };
@@ -107,6 +108,13 @@ function createHarness(overrides = {}) {
     },
     completeNodeFromBackground: async (nodeId, payload) => {
       calls.complete.push({ nodeId, payload });
+    },
+    markCurrentRegistrationAccountUsed: async (markState, options) => {
+      calls.markAccountUsed.push({ state: markState, options });
+      if (typeof overrides.markCurrentRegistrationAccountUsed === 'function') {
+        return overrides.markCurrentRegistrationAccountUsed(markState, options);
+      }
+      return { updated: true };
     },
     addLog: async (message, level, options) => {
       calls.logs.push({ message, level, options });
@@ -172,6 +180,36 @@ test('pix redeem posts the first unused cdkey with the current access token', as
     nodeId: 'pix-redeem',
     payload: { cdkey: 'CDK-001' },
   }]);
+});
+
+test('pix redeem marks the current account used when redeem is the final step', async () => {
+  const harness = createHarness({
+    state: {
+      email: 'second@example.com',
+      emailGenerator: 'custom-pool',
+      pixRedeemContinueAfterRedeem: false,
+    },
+  });
+
+  await harness.executor.executePixRedeem({ nodeId: 'pix-redeem', visibleStep: 6 });
+
+  assert.equal(harness.calls.markAccountUsed.length, 1);
+  assert.equal(harness.calls.markAccountUsed[0].state.email, 'second@example.com');
+  assert.equal(harness.calls.markAccountUsed[0].options.logPrefix, 'Pix 卡密兑换成功');
+});
+
+test('pix redeem leaves account marking to the OAuth tail when continue mode is selected', async () => {
+  const harness = createHarness({
+    state: {
+      email: 'second@example.com',
+      emailGenerator: 'custom-pool',
+      pixRedeemContinueAfterRedeem: true,
+    },
+  });
+
+  await harness.executor.executePixRedeem({ nodeId: 'pix-redeem', visibleStep: 6 });
+
+  assert.equal(harness.calls.markAccountUsed.length, 0);
 });
 
 test('pix redeem falls back to /api/auth/session when the checkout content script is not ready', async () => {

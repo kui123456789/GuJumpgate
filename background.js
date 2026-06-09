@@ -3505,7 +3505,12 @@ async function clearCurrentRegistrationEmailRuntimeState(state = {}, options = {
 }
 
 function getCustomEmailPoolEmailForRun(state = {}, targetRun = 1) {
-  const entries = getCustomEmailPool(state);
+  const structuredEntries = normalizeCustomEmailPoolEntryObjects(state?.customEmailPoolEntries);
+  if (structuredEntries.length > 0) {
+    const nextEntry = structuredEntries.find((entry) => entry.enabled && !entry.used);
+    return nextEntry?.email || '';
+  }
+  const entries = normalizeCustomEmailPool(state?.customEmailPool);
   const numericRun = Math.max(1, Math.floor(Number(targetRun) || 1));
   return entries[numericRun - 1] || '';
 }
@@ -16448,6 +16453,7 @@ const pixRedeemExecutor = self.MultiPageBackgroundPixRedeem?.createPixRedeemExec
   getState,
   getTabId,
   isTabAlive,
+  markCurrentRegistrationAccountUsed,
   registerTab,
   sendTabMessageUntilStopped,
   setState,

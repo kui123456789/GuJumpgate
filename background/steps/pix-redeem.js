@@ -20,6 +20,7 @@
       getState = async () => ({}),
       getTabId,
       isTabAlive,
+      markCurrentRegistrationAccountUsed = null,
       now = () => Date.now(),
       registerTab,
       sendTabMessageUntilStopped,
@@ -48,6 +49,10 @@
     function resolveVisibleStep(state = {}) {
       const visibleStep = Math.floor(Number(state?.visibleStep) || 0);
       return visibleStep > 0 ? visibleStep : 6;
+    }
+
+    function shouldMarkRegistrationAccountUsedAfterRedeem(state = {}) {
+      return state?.pixRedeemContinueAfterRedeem !== true;
     }
 
     async function getMergedState(state = {}) {
@@ -696,8 +701,6 @@
           lastAttemptAt: attemptAt,
           lastError: '',
         }));
-        await addStepLog(visibleStep, 'Pix 卡密兑换成功，继续 OAuth 后链。', 'success');
-        await completeNodeFromBackground(state?.nodeId || 'pix-redeem', { cdkey });
       } catch (error) {
         const message = getErrorMessage(error) || 'Pix 卡密兑换失败。';
         await addStepLog(visibleStep, `Pix 卡密兑换失败：${message}`, 'error');
@@ -708,6 +711,31 @@
         }));
         throw error;
       }
+
+      if (
+        shouldMarkRegistrationAccountUsedAfterRedeem(runtimeState)
+        && typeof markCurrentRegistrationAccountUsed === 'function'
+      ) {
+        try {
+          const latestState = await getMergedState(runtimeState);
+          await markCurrentRegistrationAccountUsed(latestState, {
+            logPrefix: 'Pix 卡密兑换成功',
+            level: 'ok',
+          });
+        } catch (error) {
+          await addStepLog(
+            visibleStep,
+            `Pix 卡密已兑换成功，但标记当前账号已用失败：${getErrorMessage(error) || error}`,
+            'warn'
+          );
+        }
+      }
+
+      const successMessage = shouldMarkRegistrationAccountUsedAfterRedeem(runtimeState)
+        ? 'Pix 卡密兑换成功，已停止后续 OAuth 后链。'
+        : 'Pix 卡密兑换成功，继续 OAuth 后链。';
+      await addStepLog(visibleStep, successMessage, 'success');
+      await completeNodeFromBackground(state?.nodeId || 'pix-redeem', { cdkey });
     }
 
     return {
