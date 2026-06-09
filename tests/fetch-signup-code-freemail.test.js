@@ -129,3 +129,56 @@ test('signup code step uses custom email verification URL before manual confirma
   assert.equal(customCalls[0].state.email, 'alias@example.com');
   assert.equal(customCalls[0].options.signupProfile.firstName, 'Ada');
 });
+
+test('signup code step prefers custom pool verification URL before iCloud mail session', async () => {
+  const step4Module = loadStep4Module();
+  const customCalls = [];
+  let mailConfigCalled = false;
+
+  const executor = step4Module.createStep4Executor({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypass: async () => {
+      throw new Error('manual confirmation should not be requested');
+    },
+    generateRandomBirthday: () => ({ year: 1995, month: 6, day: 9 }),
+    generateRandomName: () => ({ firstName: 'Ada', lastName: 'Lovelace' }),
+    getMailConfig: () => {
+      mailConfigCalled = true;
+      throw new Error('iCloud mail config should not be used when custom URL exists');
+    },
+    getTabId: async () => 123,
+    resolveCustomEmailVerificationStep: async (step, state, options = {}) => {
+      customCalls.push({ step, state, options });
+      return { handled: true, code: '880419' };
+    },
+    shouldUseCustomRegistrationEmail: () => false,
+    sendToContentScript: async () => ({
+      alreadyVerified: false,
+    }),
+    resolveSignupMethod: () => 'email',
+    throwIfStopped: () => {},
+    waitForTabStableComplete: async () => {},
+  });
+
+  await executor.executeStep4({
+    nodeId: 'fetch-signup-code',
+    email: 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com',
+    mailProvider: 'icloud',
+    emailGenerator: 'custom-pool',
+    customEmailPoolEntries: [{
+      email: 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com',
+      verificationUrl: 'http://icloudapi.xyz/show/key/ulnar_peptide26%2Brsapmkzibnlzsfk72@icloud.com',
+    }],
+  });
+
+  assert.equal(mailConfigCalled, false);
+  assert.equal(customCalls.length, 1);
+  assert.equal(customCalls[0].step, 4);
+  assert.equal(customCalls[0].state.email, 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com');
+});

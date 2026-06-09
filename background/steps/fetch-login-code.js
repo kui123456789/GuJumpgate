@@ -576,32 +576,34 @@
       const rawFixedTargetEmail = rawDisplayedVerificationEmail
         || normalizeStep8VerificationTargetEmail(preparedState?.step8VerificationTargetEmail || preparedState?.email);
 
-      if (shouldUseCustomRegistrationEmail(preparedState)) {
-        await setState({
+      await setState({
+        step8VerificationTargetEmail: rawDisplayedVerificationEmail || '',
+      });
+      await addLog(`步骤 ${visibleStep}：邮箱验证码页面已就绪，开始获取验证码。`, 'info');
+      if (rawDisplayedVerificationEmail) {
+        await addLog(`步骤 ${visibleStep}：已固定当前验证码页显示邮箱 ${rawDisplayedVerificationEmail} 作为后续匹配目标。`, 'info');
+      }
+
+      if (typeof resolveCustomEmailVerificationStep === 'function') {
+        const customResult = await resolveCustomEmailVerificationStep(8, {
+          ...preparedState,
           step8VerificationTargetEmail: rawDisplayedVerificationEmail || '',
+        }, {
+          completionStep: visibleStep,
+          promptStep: visibleStep,
+          targetEmail: rawFixedTargetEmail,
+          getRemainingTimeMs: getStep8RemainingTimeResolver(preparedState?.oauthUrl || '', visibleStep),
         });
-        await addLog(`步骤 ${visibleStep}：邮箱验证码页面已就绪，开始获取验证码。`, 'info');
-        if (rawDisplayedVerificationEmail) {
-          await addLog(`步骤 ${visibleStep}：已固定当前验证码页显示邮箱 ${rawDisplayedVerificationEmail} 作为后续匹配目标。`, 'info');
+        if (customResult?.handled) {
+          return {
+            lastResendAt: latestResendAt,
+            phoneVerificationRequired: Boolean(customResult.phoneVerificationRequired),
+            url: customResult.url || '',
+          };
         }
-        if (typeof resolveCustomEmailVerificationStep === 'function') {
-          const customResult = await resolveCustomEmailVerificationStep(8, {
-            ...preparedState,
-            step8VerificationTargetEmail: rawDisplayedVerificationEmail || '',
-          }, {
-            completionStep: visibleStep,
-            promptStep: visibleStep,
-            targetEmail: rawFixedTargetEmail,
-            getRemainingTimeMs: getStep8RemainingTimeResolver(preparedState?.oauthUrl || '', visibleStep),
-          });
-          if (customResult?.handled) {
-            return {
-              lastResendAt: latestResendAt,
-              phoneVerificationRequired: Boolean(customResult.phoneVerificationRequired),
-              url: customResult.url || '',
-            };
-          }
-        }
+      }
+
+      if (shouldUseCustomRegistrationEmail(preparedState)) {
         await confirmCustomVerificationStepBypass(8, {
           completionStep: visibleStep,
           promptStep: visibleStep,
@@ -617,15 +619,6 @@
       const shouldCompareVerificationEmail = mail.provider !== '2925';
       const displayedVerificationEmail = shouldCompareVerificationEmail ? rawDisplayedVerificationEmail : '';
       const fixedTargetEmail = shouldCompareVerificationEmail ? rawFixedTargetEmail : '';
-
-      await setState({
-        step8VerificationTargetEmail: displayedVerificationEmail || '',
-      });
-
-      await addLog(`步骤 ${visibleStep}：邮箱验证码页面已就绪，开始获取验证码。`, 'info');
-      if (shouldCompareVerificationEmail && displayedVerificationEmail) {
-        await addLog(`步骤 ${visibleStep}：已固定当前验证码页显示邮箱 ${displayedVerificationEmail} 作为后续匹配目标。`, 'info');
-      }
 
       if (mail.source === 'icloud-mail' && typeof ensureIcloudMailSession === 'function') {
         await addLog(`步骤 ${visibleStep}：正在确认 iCloud 邮箱登录态...`, 'info');

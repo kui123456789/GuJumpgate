@@ -240,6 +240,64 @@ test('login code step uses custom email verification URL before manual confirmat
   assert.equal(stateUpdates[0].step8VerificationTargetEmail, 'alias@example.com');
 });
 
+test('login code step prefers custom pool verification URL before iCloud mail config', async () => {
+  const step8Module = loadStep8Module();
+  const customCalls = [];
+  let mailConfigCalled = false;
+  const currentState = {
+    nodeId: 'fetch-login-code',
+    oauthUrl: 'https://auth.openai.com/oauth/authorize?client_id=test',
+    email: 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com',
+    mailProvider: 'icloud',
+    emailGenerator: 'custom-pool',
+    customEmailPoolEntries: [{
+      email: 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com',
+      verificationUrl: 'http://icloudapi.xyz/show/key/ulnar_peptide26%2Brsapmkzibnlzsfk72@icloud.com',
+    }],
+    loginVerificationRequestedAt: 0,
+  };
+
+  const executor = step8Module.createStep8Executor({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        update: async () => {},
+      },
+    },
+    completeNodeFromBackground: async () => {},
+    confirmCustomVerificationStepBypass: async () => {
+      throw new Error('manual confirmation should not be requested');
+    },
+    ensureStep8VerificationPageReady: async () => ({
+      state: 'verification_page',
+      displayedEmail: 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com',
+      url: 'https://auth.openai.com/u/login/email-verification',
+    }),
+    getMailConfig: () => {
+      mailConfigCalled = true;
+      throw new Error('iCloud mail config should not be used when custom URL exists');
+    },
+    getOAuthFlowStepTimeoutMs: async (fallbackMs) => fallbackMs,
+    getState: async () => currentState,
+    getTabId: async () => 123,
+    isVerificationMailPollingError: () => false,
+    resolveCustomEmailVerificationStep: async (step, preparedState, options = {}) => {
+      customCalls.push({ step, preparedState, options });
+      return { handled: true, code: '880419' };
+    },
+    setState: async () => {},
+    shouldUseCustomRegistrationEmail: () => false,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep8(currentState);
+
+  assert.equal(mailConfigCalled, false);
+  assert.equal(customCalls.length, 1);
+  assert.equal(customCalls[0].step, 8);
+  assert.equal(customCalls[0].options.targetEmail, 'ulnar_peptide26+rsapmkzibnlzsfk72@icloud.com');
+});
+
 test('login code step treats Outlook Email Plus as API polling mail provider', async () => {
   const step8Module = loadStep8Module();
   const logs = [];

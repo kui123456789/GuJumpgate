@@ -100,15 +100,16 @@
 
     async function executeSignupEmailVerificationStep(state, stepStartedAt, verificationSessionKey) {
       const signupProfile = buildSignupProfileForVerificationStep();
-      if (shouldUseCustomRegistrationEmail(state)) {
-        if (typeof resolveCustomEmailVerificationStep === 'function') {
-          const customResult = await resolveCustomEmailVerificationStep(4, state, {
-            signupProfile,
-          });
-          if (customResult?.handled) {
-            return customResult;
-          }
+      if (typeof resolveCustomEmailVerificationStep === 'function') {
+        const customResult = await resolveCustomEmailVerificationStep(4, state, {
+          signupProfile,
+        });
+        if (customResult?.handled) {
+          return customResult;
         }
+      }
+
+      if (shouldUseCustomRegistrationEmail(state)) {
         await confirmCustomVerificationStepBypass(4);
         return;
       }
