@@ -134,6 +134,21 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     /启用[\s\S]*已用/,
     'Pix 卡密池 UI 应展示启用和已用状态'
   );
+  assert.match(
+    sidepanelJs,
+    /function\s+markPixRedeemCdkeyUnused/,
+    'Pix 已用卡密应提供设为未用动作'
+  );
+  assert.match(
+    sidepanelJs,
+    /usedAt:\s*0[\s\S]*lastError:\s*''/,
+    '设为未用时应清空 usedAt 和上次错误'
+  );
+  assert.match(
+    sidepanelJs,
+    /pix-redeem-cdkey-status-action[\s\S]*设为未用/,
+    '已用状态应渲染为可点击的设为未用按钮'
+  );
 });
 
 test('sidepanel renders PayPal-style hosted SMS auth pool manager', () => {

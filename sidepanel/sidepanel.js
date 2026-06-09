@@ -2988,6 +2988,28 @@ function updatePixRedeemCdkeyEnabled(cdkey = '', enabled = true) {
   saveSettings({ silent: true }).catch(() => { });
 }
 
+function markPixRedeemCdkeyUnused(cdkey = '') {
+  const normalizedCdkey = String(cdkey || '').trim();
+  if (!normalizedCdkey) {
+    return;
+  }
+  const usage = normalizePixRedeemCdkeyUsageValue(latestState?.pixRedeemCdkeyUsage || {});
+  const currentEntry = getPixRedeemCdkeyUsageEntry(usage, normalizedCdkey);
+  const nextUsage = {
+    ...usage,
+    [normalizedCdkey]: {
+      ...currentEntry,
+      usedAt: 0,
+      lastError: '',
+    },
+  };
+  syncLatestState({ pixRedeemCdkeyUsage: nextUsage });
+  renderPixRedeemCdkeyStatusList(latestState);
+  updatePixRedeemCdkeyPoolSummary(latestState, { skipRender: true });
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+}
+
 function renderPixRedeemCdkeyStatusList(state = latestState) {
   if (!pixRedeemCdkeyStatusList) {
     return;
@@ -3030,9 +3052,17 @@ function renderPixRedeemCdkeyStatusList(state = latestState) {
     cdkeyText.className = 'pix-redeem-cdkey-text mono';
     cdkeyText.textContent = cdkey;
 
-    const status = document.createElement('span');
-    status.className = `icloud-tag ${used ? 'used' : enabled ? 'active' : ''}`;
+    const status = document.createElement(used ? 'button' : 'span');
+    status.className = `icloud-tag ${used ? 'used pix-redeem-cdkey-status-action' : enabled ? 'active' : ''}`;
     status.textContent = used ? '已用' : enabled ? '启用' : '停用';
+    if (used) {
+      status.type = 'button';
+      status.title = '点击设为未用';
+      status.setAttribute('aria-label', `将 Pix 卡密 ${cdkey} 设为未用`);
+      status.addEventListener('click', () => {
+        markPixRedeemCdkeyUnused(cdkey);
+      });
+    }
 
     checkbox.addEventListener('change', () => {
       updatePixRedeemCdkeyEnabled(cdkey, checkbox.checked);

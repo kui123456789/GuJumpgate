@@ -2096,6 +2096,18 @@ header {
   font-size: 12px;
 }
 
+.pix-redeem-cdkey-status-action {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.pix-redeem-cdkey-status-action:hover,
+.pix-redeem-cdkey-status-action:focus-visible {
+  filter: brightness(1.08);
+  outline: none;
+}
+
 .data-select {
   flex: 1;
   padding: 7px 10px;
