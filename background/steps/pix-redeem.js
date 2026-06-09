@@ -8,6 +8,7 @@
   const SESSION_READ_MESSAGE_TIMEOUT_MS = 30000;
   const SESSION_READ_RESPONSE_TIMEOUT_MS = 15000;
   const PIX_REDEEM_TIMEOUT_MS = 45000;
+  const PIX_ACCOUNT_INELIGIBLE_ERROR_PREFIX = 'PIX_ACCOUNT_INELIGIBLE::';
 
   function createPixRedeemExecutor(deps = {}) {
     const {
@@ -33,7 +34,8 @@
     }
 
     function getErrorMessage(error) {
-      return normalizeString(error?.message || error);
+      return normalizeString(error?.message || error)
+        .replace(new RegExp(`^${PIX_ACCOUNT_INELIGIBLE_ERROR_PREFIX}`, 'i'), '');
     }
 
     function addStepLog(step, message, level = 'info') {
@@ -607,7 +609,11 @@
       const item = getEligibilityItem(payload, cdkey);
       const failureMessage = getEligibilityFailureMessage(item);
       if (failureMessage) {
-        throw new Error(`Pix 资格检查失败：${failureMessage}`);
+        const accountIneligible = item
+          && normalizeBoolean(item.token_ok ?? item.tokenOk)
+          && !normalizeBoolean(item.eligible);
+        const prefix = accountIneligible ? PIX_ACCOUNT_INELIGIBLE_ERROR_PREFIX : '';
+        throw new Error(`${prefix}Pix 资格检查失败：${failureMessage}`);
       }
       return item;
     }

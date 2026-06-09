@@ -1,9 +1,41 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 
 require('../background/steps/pix-redeem.js');
 
 const pixModule = globalThis.MultiPageBackgroundPixRedeem;
+const rootDir = path.resolve(__dirname, '..');
+const backgroundJs = fs.readFileSync(path.join(rootDir, 'background.js'), 'utf8');
+
+function extractBackgroundFunction(functionName) {
+  const start = backgroundJs.indexOf(`function ${functionName}(`);
+  assert.notEqual(start, -1, `missing function ${functionName}`);
+  const openBrace = backgroundJs.indexOf('{', start);
+  assert.notEqual(openBrace, -1, `missing opening brace for ${functionName}`);
+  let depth = 0;
+  for (let index = openBrace; index < backgroundJs.length; index += 1) {
+    const char = backgroundJs[index];
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return backgroundJs.slice(start, index + 1);
+      }
+    }
+  }
+  throw new Error(`missing closing brace for ${functionName}`);
+}
+
+const isPlusCheckoutNonFreeTrialFailure = vm.runInNewContext(`
+  const HOTMAIL_MAILBOX_UNAVAILABLE_PREFIX = 'HOTMAIL_MAILBOX_UNAVAILABLE::';
+  const loggingStatus = null;
+  ${extractBackgroundFunction('getErrorMessage')}
+  ${extractBackgroundFunction('isPlusCheckoutNonFreeTrialFailure')}
+  isPlusCheckoutNonFreeTrialFailure;
+`);
 
 function createJsonResponse(status, payload = {}) {
   return {
@@ -275,13 +307,20 @@ test('pix redeem checks access token eligibility before posting redeem', async (
 
   await assert.rejects(
     harness.executor.executePixRedeem({ visibleStep: 6 }),
-    /账号无资格/
+    /PIX_ACCOUNT_INELIGIBLE::.*账号无资格/
   );
   assert.equal(harness.calls.fetch.length, 1);
   assert.equal(harness.calls.fetch[0].url, 'https://pix.example/api/external/access-token/check');
   assert.equal(harness.calls.fetch[0].options.headers['X-Client-Id'], 'client-test-001');
   assert.equal(harness.getState().pixRedeemCdkeyUsage['CDK-001'].usedAt || 0, 0);
   assert.match(harness.getState().pixRedeemCdkeyUsage['CDK-001'].lastError, /账号无资格/);
+});
+
+test('pix account ineligible failures are classified for auto account switching', () => {
+  assert.equal(
+    isPlusCheckoutNonFreeTrialFailure(new Error('PIX_ACCOUNT_INELIGIBLE::Pix 资格检查失败：账号无资格')),
+    true
+  );
 });
 
 test('pix redeem does not mark cdkey used when redeem payload item failed', async () => {

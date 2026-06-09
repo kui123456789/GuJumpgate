@@ -11719,8 +11719,10 @@ function isPhoneSmsPlatformRateLimitFailure(error) {
 }
 
 function isPlusCheckoutNonFreeTrialFailure(error) {
+  const rawMessage = String(typeof error === 'string' ? error : error?.message || '');
   const message = getErrorMessage(error);
-  return /PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格|该账号已经开通过\s*ChatGPT\s*订阅套餐，不能重复订阅(?:。)?(?:（\s*checkout_order\s*）|\(\s*checkout_order\s*\))?/i.test(message);
+  const combinedMessage = `${rawMessage}\n${message}`;
+  return /PIX_ACCOUNT_INELIGIBLE::|PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格|该账号已经开通过\s*ChatGPT\s*订阅套餐，不能重复订阅(?:。)?(?:（\s*checkout_order\s*）|\(\s*checkout_order\s*\))?/i.test(combinedMessage);
 }
 
 function isGpcTaskEndedFailure(error) {
