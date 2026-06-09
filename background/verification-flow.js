@@ -194,30 +194,44 @@
       return digits.length === 6 ? digits : '';
     }
 
-    function extractCodeFromText(value = '', options = {}) {
+    function collectCodesFromText(value = '', options = {}) {
       const text = String(value || '');
       if (!text.trim()) {
-        return '';
+        return [];
       }
       const contextualPatterns = [
-        /(?:openai|chatgpt|verification|verify|one[-\s]*time|code|验证码|一次性)[^0-9]{0,40}((?:\d[\s-]*){6})/i,
-        /((?:\d[\s-]*){6})[^0-9]{0,40}(?:openai|chatgpt|verification|verify|one[-\s]*time|code|验证码|一次性)/i,
+        /(?:openai|chatgpt|verification|verify|one[-\s]*time|temporary|code|验证码|一次性)[^0-9]{0,60}((?:\d[\s-]*){6})/gi,
+        /((?:\d[\s-]*){6})[^0-9]{0,60}(?:openai|chatgpt|verification|verify|one[-\s]*time|temporary|code|验证码|一次性)/gi,
       ];
+      const codes = [];
       for (const pattern of contextualPatterns) {
-        const match = text.match(pattern);
-        const code = match ? normalizeDigits(match[1]) : '';
-        if (code) {
-          return code;
+        let match = pattern.exec(text);
+        while (match) {
+          const code = normalizeDigits(match[1]);
+          if (code) {
+            codes.push(code);
+          }
+          match = pattern.exec(text);
         }
       }
       if (options.allowBareCode) {
-        const bareMatch = text.match(/(?:^|[^\d])((?:\d[\s-]*){6})(?:[^\d]|$)/);
-        const code = bareMatch ? normalizeDigits(bareMatch[1]) : '';
-        if (code) {
-          return code;
+        const barePattern = /(?:^|[^\d])((?:\d[\s-]*){6})(?:[^\d]|$)/g;
+        let match = barePattern.exec(text);
+        while (match) {
+          const code = normalizeDigits(match[1]);
+          if (code) {
+            codes.push(code);
+          }
+          match = barePattern.exec(text);
         }
       }
-      return '';
+      return codes;
+    }
+
+    function extractCodeFromText(value = '', options = {}) {
+      const excluded = new Set((options.excludeCodes || []).map((code) => String(code || '').trim()).filter(Boolean));
+      const codes = collectCodesFromText(value, options).filter((code) => !excluded.has(code));
+      return codes.length ? codes[codes.length - 1] : '';
     }
 
     function collectCustomEmailVerificationTextCandidates(payload) {
@@ -262,18 +276,22 @@
       return [...prioritized, ...fallback];
     }
 
-    function extractCustomEmailVerificationCode(payload) {
+    function collectCustomEmailVerificationCodes(payload) {
+      const codes = [];
       if (typeof payload === 'string' || typeof payload === 'number') {
-        return extractCodeFromText(payload, { allowBareCode: true });
+        return collectCodesFromText(payload, { allowBareCode: true });
       }
       for (const candidate of collectCustomEmailVerificationTextCandidates(payload)) {
         const allowBareCode = /(?:code|otp|verification)/i.test(candidate.key);
-        const code = extractCodeFromText(candidate.text, { allowBareCode });
-        if (code) {
-          return code;
-        }
+        codes.push(...collectCodesFromText(candidate.text, { allowBareCode }));
       }
-      return '';
+      return codes;
+    }
+
+    function extractCustomEmailVerificationCode(payload, options = {}) {
+      const excluded = new Set((options.excludeCodes || []).map((code) => String(code || '').trim()).filter(Boolean));
+      const codes = collectCustomEmailVerificationCodes(payload).filter((code) => !excluded.has(code));
+      return codes.length ? codes[codes.length - 1] : '';
     }
 
     function parseCustomEmailVerificationPayloadText(text = '') {
@@ -1569,7 +1587,9 @@
         throw new Error(`步骤 ${step}：自定义邮箱取码 URL 请求失败，HTTP ${response.status}${detail ? `：${detail}` : ''}`);
       }
 
-      const code = extractCustomEmailVerificationCode(payload);
+      const code = extractCustomEmailVerificationCode(payload, {
+        excludeCodes: options.excludeCodes || [],
+      });
       if (!code) {
         const detail = describeCustomEmailVerificationPayload(payload);
         throw new Error(`步骤 ${step}：自定义邮箱取码 URL 暂未返回有效验证码${detail ? `：${detail}` : ''}`);
@@ -1588,47 +1608,70 @@
     async function resolveCustomEmailVerificationStep(step, state = {}, options = {}) {
       const completionStep = getCompletionStep(step, options);
       activeVerificationLogStep = completionStep;
-      const result = await fetchCustomEmailVerificationCode(step, state, options);
-      if (!result?.handled) {
+      const stateKey = getVerificationCodeStateKey(step);
+      const rejectedCodes = new Set(
+        [
+          state?.[stateKey],
+          ...(Array.isArray(options.excludeCodes) ? options.excludeCodes : []),
+        ].map((code) => String(code || '').trim()).filter(Boolean)
+      );
+      const maxAttempts = Math.max(1, Math.min(5, Math.floor(Number(options.maxSubmitAttempts) || 5)));
+      let lastRejectedText = '';
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const result = await fetchCustomEmailVerificationCode(step, state, {
+          ...options,
+          excludeCodes: [...rejectedCodes],
+        });
+        if (!result?.handled) {
+          return {
+            handled: false,
+          };
+        }
+
+        throwIfStopped();
+        const submitResult = await submitVerificationCode(step, result.code, options);
+        if (submitResult.invalidCode) {
+          rejectedCodes.add(result.code);
+          lastRejectedText = submitResult.errorText || result.code;
+          await addLog(`步骤 ${completionStep}：自定义邮箱取码 URL 返回的验证码被页面拒绝：${lastRejectedText}`, 'warn');
+          if (attempt < maxAttempts) {
+            await sleepWithStop(1000);
+            continue;
+          }
+          throw new Error(`步骤 ${completionStep}：自定义邮箱取码 URL 返回的验证码连续被页面拒绝：${lastRejectedText}`);
+        }
+
+        await setState({
+          lastEmailTimestamp: result.emailTimestamp,
+          [stateKey]: result.code,
+        });
+
+        const completionNodeId = await getNodeIdForStep(completionStep);
+        if (!completionNodeId) {
+          throw new Error(`步骤 ${completionStep} 未映射到验证码节点。`);
+        }
+        await completeNodeFromBackground(completionNodeId, {
+          emailTimestamp: result.emailTimestamp,
+          code: result.code,
+          phoneVerificationRequired: Boolean(submitResult.addPhonePage),
+          ...(step === 4 && submitResult?.skipProfileStep ? { skipProfileStep: true } : {}),
+          ...(step === 4 && submitResult?.skipProfileStepReason
+            ? { skipProfileStepReason: submitResult.skipProfileStepReason }
+            : {}),
+        });
+
         return {
-          handled: false,
+          handled: true,
+          code: result.code,
+          emailTimestamp: result.emailTimestamp,
+          phoneVerificationRequired: Boolean(submitResult.addPhonePage),
+          url: submitResult.url || '',
+          verificationUrl: result.verificationUrl,
         };
       }
 
-      throwIfStopped();
-      const submitResult = await submitVerificationCode(step, result.code, options);
-      if (submitResult.invalidCode) {
-        throw new Error(`步骤 ${completionStep}：自定义邮箱取码 URL 返回的验证码被页面拒绝：${submitResult.errorText || result.code}`);
-      }
-
-      const stateKey = getVerificationCodeStateKey(step);
-      await setState({
-        lastEmailTimestamp: result.emailTimestamp,
-        [stateKey]: result.code,
-      });
-
-      const completionNodeId = await getNodeIdForStep(completionStep);
-      if (!completionNodeId) {
-        throw new Error(`步骤 ${completionStep} 未映射到验证码节点。`);
-      }
-      await completeNodeFromBackground(completionNodeId, {
-        emailTimestamp: result.emailTimestamp,
-        code: result.code,
-        phoneVerificationRequired: Boolean(submitResult.addPhonePage),
-        ...(step === 4 && submitResult?.skipProfileStep ? { skipProfileStep: true } : {}),
-        ...(step === 4 && submitResult?.skipProfileStepReason
-          ? { skipProfileStepReason: submitResult.skipProfileStepReason }
-          : {}),
-      });
-
-      return {
-        handled: true,
-        code: result.code,
-        emailTimestamp: result.emailTimestamp,
-        phoneVerificationRequired: Boolean(submitResult.addPhonePage),
-        url: submitResult.url || '',
-        verificationUrl: result.verificationUrl,
-      };
+      throw new Error(`步骤 ${completionStep}：自定义邮箱取码 URL 未能提交有效验证码${lastRejectedText ? `：${lastRejectedText}` : ''}`);
     }
 
     async function resolveVerificationStep(step, state, mail, options = {}) {

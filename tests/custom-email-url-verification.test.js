@@ -93,6 +93,33 @@ test('custom email URL verifier extracts codes from text and nested JSON', () =>
   );
 });
 
+test('custom email URL verifier prefers the latest OpenAI code when multiple messages are returned', () => {
+  const { helpers } = createHelpers();
+
+  assert.equal(
+    helpers.__test.extractCustomEmailVerificationCode([
+      {
+        message: 'Your OpenAI verification code is 202123.',
+        received_at: '2026-06-09 21:49:00',
+      },
+      {
+        message: 'Enter this temporary verification code to continue: 487704',
+        received_at: '2026-06-09 21:50:00',
+      },
+    ]),
+    '487704'
+  );
+  assert.equal(
+    helpers.__test.extractCustomEmailVerificationCode(
+      [
+        'OpenAI verification code: 202123',
+        'OpenAI verification code: 487704',
+      ].join('\n')
+    ),
+    '487704'
+  );
+});
+
 test('custom email URL verifier fetches code and submits signup verification', async () => {
   const requestedUrls = [];
   const { helpers, completions, fillMessages, getState } = createHelpers({
@@ -132,6 +159,39 @@ test('custom email URL verifier fetches code and submits signup verification', a
   assert.equal(completions[0].nodeId, 'fetch-signup-code');
   assert.equal(completions[0].payload.code, '654321');
 });
+
+test('custom email URL verifier retries with another returned code after invalid submission', async () => {
+  const submittedCodes = [];
+  const { helpers, completions, getState } = createHelpers({
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([
+        { message: 'Your OpenAI verification code is 487704.' },
+        { message: 'Your OpenAI verification code is 202123.' },
+      ]),
+    }),
+    sendToContentScriptResilient: async (_target, message) => {
+      submittedCodes.push(message.payload.code);
+      if (message.payload.code === '202123') {
+        return {
+          invalidCode: true,
+          errorText: 'Incorrect code',
+        };
+      }
+      return { success: true, url: 'https://chatgpt.com/' };
+    },
+  });
+
+  const result = await helpers.resolveCustomEmailVerificationStep(4, getState());
+
+  assert.equal(result.handled, true);
+  assert.equal(result.code, '487704');
+  assert.deepEqual(submittedCodes, ['202123', '487704']);
+  assert.equal(completions.length, 1);
+  assert.equal(completions[0].payload.code, '487704');
+});
+
 
 test('custom email URL verifier returns unhandled when current email has no URL', async () => {
   const { helpers } = createHelpers({
