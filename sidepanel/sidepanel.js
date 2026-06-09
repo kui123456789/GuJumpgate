@@ -763,7 +763,7 @@ let currentPlusPaymentMethod = DEFAULT_PLUS_PAYMENT_METHOD;
 let currentPlusAccountAccessStrategy = PLUS_ACCOUNT_ACCESS_STRATEGY_OAUTH;
 let currentSignupMethod = DEFAULT_SIGNUP_METHOD;
 let currentPhoneSignupReloginAfterBindEmailEnabled = DEFAULT_PHONE_SIGNUP_RELOGIN_AFTER_BIND_EMAIL_ENABLED;
-let currentPixRedeemStopAfterRedeem = false;
+let currentPixRedeemStopAfterRedeem = true;
 let hostedSmsPoolExpanded = false;
 let authHostedSmsPoolExpanded = false;
 let chatGptApiSmsPoolExpanded = false;
@@ -1150,6 +1150,9 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
   const pixRedeemStopAfterRedeem = typeof options === 'string'
     ? currentPixRedeemStopAfterRedeem
     : Boolean(options.pixRedeemStopAfterRedeem ?? currentPixRedeemStopAfterRedeem);
+  const pixRedeemContinueAfterRedeem = typeof options === 'string'
+    ? !currentPixRedeemStopAfterRedeem
+    : Boolean(options.pixRedeemContinueAfterRedeem ?? !pixRedeemStopAfterRedeem);
   const activeFlowId = typeof options === 'string'
     ? ((typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId)
     : (options.activeFlowId || (typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId);
@@ -1160,6 +1163,7 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
     signupMethod: normalizeSignupMethod(rawSignupMethod),
     phoneSignupReloginAfterBindEmailEnabled,
     pixRedeemStopAfterRedeem,
+    pixRedeemContinueAfterRedeem,
   };
   const normalizedAccountAccessStrategy = typeof normalizePlusAccountAccessStrategy === 'function'
     ? normalizePlusAccountAccessStrategy(rawAccountAccessStrategy)
@@ -1200,6 +1204,9 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
   const pixRedeemStopAfterRedeem = typeof options === 'string'
     ? currentPixRedeemStopAfterRedeem
     : Boolean(options.pixRedeemStopAfterRedeem ?? currentPixRedeemStopAfterRedeem);
+  const pixRedeemContinueAfterRedeem = typeof options === 'string'
+    ? !currentPixRedeemStopAfterRedeem
+    : Boolean(options.pixRedeemContinueAfterRedeem ?? !pixRedeemStopAfterRedeem);
   const activeFlowId = typeof options === 'string'
     ? ((typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId)
     : (options.activeFlowId || (typeof latestState !== 'undefined' ? latestState?.activeFlowId : '') || defaultFlowId);
@@ -1210,6 +1217,7 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
     signupMethod: normalizeSignupMethod(rawSignupMethod),
     phoneSignupReloginAfterBindEmailEnabled,
     pixRedeemStopAfterRedeem,
+    pixRedeemContinueAfterRedeem,
   };
   const normalizedAccountAccessStrategy = typeof normalizePlusAccountAccessStrategy === 'function'
     ? normalizePlusAccountAccessStrategy(rawAccountAccessStrategy)
@@ -1290,6 +1298,9 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
   const pixRedeemStopAfterRedeem = typeof options === 'string'
     ? currentPixRedeemStopAfterRedeem
     : Boolean(options.pixRedeemStopAfterRedeem ?? currentPixRedeemStopAfterRedeem);
+  const pixRedeemContinueAfterRedeem = typeof options === 'string'
+    ? !currentPixRedeemStopAfterRedeem
+    : Boolean(options.pixRedeemContinueAfterRedeem ?? !pixRedeemStopAfterRedeem);
   const normalizeAccountAccessStrategySafe = typeof normalizePlusAccountAccessStrategy === 'function'
     ? normalizePlusAccountAccessStrategy
     : ((value = '') => {
@@ -1314,6 +1325,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
     signupMethod: currentSignupMethod,
     phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
     pixRedeemStopAfterRedeem: currentPixRedeemStopAfterRedeem,
+    pixRedeemContinueAfterRedeem,
   });
   const nextWorkflowNodes = typeof getWorkflowNodesForMode === 'function'
     ? getWorkflowNodesForMode(currentPlusModeEnabled, {
@@ -1324,6 +1336,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
       signupMethod: currentSignupMethod,
       phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
       pixRedeemStopAfterRedeem: currentPixRedeemStopAfterRedeem,
+      pixRedeemContinueAfterRedeem,
     })
     : stepDefinitions.map((step) => ({
       legacyStepId: Number(step.id),
@@ -3126,7 +3139,7 @@ function getSelectedPixRedeemStopAfterRedeem(state = latestState) {
   if (typeof inputPixRedeemStopAfterRedeem !== 'undefined' && inputPixRedeemStopAfterRedeem) {
     return Boolean(inputPixRedeemStopAfterRedeem.checked);
   }
-  return Boolean(state?.pixRedeemStopAfterRedeem);
+  return state?.pixRedeemContinueAfterRedeem === true ? false : true;
 }
 
 function normalizePlusCheckoutModeValue(value = '') {
@@ -5797,6 +5810,7 @@ function collectSettingsPayload() {
     pixRedeemExternalApiKey: String(inputPixRedeemExternalApiKey?.value || '').trim(),
     pixRedeemClientId: String(inputPixRedeemClientId?.value || '').trim(),
     pixRedeemStopAfterRedeem: Boolean(inputPixRedeemStopAfterRedeem?.checked),
+    pixRedeemContinueAfterRedeem: !Boolean(inputPixRedeemStopAfterRedeem?.checked),
     pixRedeemCdkeyPoolText: normalizePixRedeemCdkeyPoolTextValue(inputPixRedeemCdkeyPool?.value || ''),
     pixRedeemCdkeyUsage: normalizePixRedeemCdkeyUsageValue(latestState?.pixRedeemCdkeyUsage || {}),
     paypalEmail: String(currentPayPalAccount?.email || latestState?.paypalEmail || '').trim(),
@@ -13196,6 +13210,9 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
         ? inputPixRedeemStopAfterRedeem.checked
         : currentPixRedeemStopAfterRedeem)
   );
+  const nextPixRedeemContinueAfterRedeem = Boolean(
+    options.pixRedeemContinueAfterRedeem ?? !nextPixRedeemStopAfterRedeem
+  );
   const nextPaymentMethod = normalizePlusPaymentMethod(rawPaymentMethod);
   const normalizeAccountAccessStrategySafe = typeof normalizePlusAccountAccessStrategy === 'function'
     ? normalizePlusAccountAccessStrategy
@@ -13253,6 +13270,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     signupMethod: nextSignupMethod,
     phoneSignupReloginAfterBindEmailEnabled: nextPhoneSignupReloginAfterBindEmailEnabled,
     pixRedeemStopAfterRedeem: nextPixRedeemStopAfterRedeem,
+    pixRedeemContinueAfterRedeem: nextPixRedeemContinueAfterRedeem,
   });
   renderStepsList();
 }
@@ -13280,7 +13298,8 @@ function applySettingsState(state) {
       plusAccountAccessStrategy: state?.plusAccountAccessStrategy,
       signupMethod: stepDefinitionState.signupMethod,
       phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
-      pixRedeemStopAfterRedeem: Boolean(state?.pixRedeemStopAfterRedeem),
+      pixRedeemStopAfterRedeem: state?.pixRedeemContinueAfterRedeem === true ? false : true,
+      pixRedeemContinueAfterRedeem: Boolean(state?.pixRedeemContinueAfterRedeem),
     });
   }
   const fallbackIpProxyService = '711proxy';
@@ -13401,7 +13420,7 @@ function applySettingsState(state) {
     inputPixRedeemClientId.value = String(state?.pixRedeemClientId || '').trim();
   }
   if (typeof inputPixRedeemStopAfterRedeem !== 'undefined' && inputPixRedeemStopAfterRedeem) {
-    inputPixRedeemStopAfterRedeem.checked = Boolean(state?.pixRedeemStopAfterRedeem);
+    inputPixRedeemStopAfterRedeem.checked = state?.pixRedeemContinueAfterRedeem === true ? false : true;
   }
   if (typeof inputPixRedeemCdkeyPool !== 'undefined' && inputPixRedeemCdkeyPool) {
     inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(state?.pixRedeemCdkeyPoolText || '');
@@ -21260,8 +21279,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.payload.pixRedeemClientId !== undefined && inputPixRedeemClientId) {
         inputPixRedeemClientId.value = String(message.payload.pixRedeemClientId || '').trim();
       }
-      if (message.payload.pixRedeemStopAfterRedeem !== undefined && inputPixRedeemStopAfterRedeem) {
-        inputPixRedeemStopAfterRedeem.checked = Boolean(message.payload.pixRedeemStopAfterRedeem);
+      if (
+        (message.payload.pixRedeemStopAfterRedeem !== undefined
+          || message.payload.pixRedeemContinueAfterRedeem !== undefined)
+        && inputPixRedeemStopAfterRedeem
+      ) {
+        inputPixRedeemStopAfterRedeem.checked = message.payload.pixRedeemContinueAfterRedeem === true ? false : true;
       }
       if (message.payload.pixRedeemCdkeyPoolText !== undefined && inputPixRedeemCdkeyPool) {
         inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(message.payload.pixRedeemCdkeyPoolText);
@@ -21277,6 +21300,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         || message.payload.plusPaymentMethod !== undefined
         || message.payload.plusAccountAccessStrategy !== undefined
         || message.payload.pixRedeemStopAfterRedeem !== undefined
+        || message.payload.pixRedeemContinueAfterRedeem !== undefined
         || message.payload.gopayHelperPhoneMode !== undefined
         || message.payload.gopayHelperAutoModeEnabled !== undefined
         || message.payload.gopayHelperOtpChannel !== undefined
@@ -21297,7 +21321,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             render: true,
             signupMethod: stepDefinitionState.signupMethod,
             plusAccountAccessStrategy: stepDefinitionState.plusAccountAccessStrategy,
-            pixRedeemStopAfterRedeem: Boolean(latestState?.pixRedeemStopAfterRedeem),
+            pixRedeemStopAfterRedeem: getSelectedPixRedeemStopAfterRedeem(latestState),
+            pixRedeemContinueAfterRedeem: Boolean(latestState?.pixRedeemContinueAfterRedeem),
           }
         );
         updatePlusModeUI();

@@ -996,6 +996,7 @@ function getStepDefinitionsForState(state = {}) {
       signupMethod: getSignupMethodForStepDefinitions(state),
       phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
       pixRedeemStopAfterRedeem: Boolean(state?.pixRedeemStopAfterRedeem),
+      pixRedeemContinueAfterRedeem: Boolean(state?.pixRedeemContinueAfterRedeem),
     });
     if (Array.isArray(definitions)) {
       return definitions;
@@ -1032,7 +1033,7 @@ function getStepDefinitionsForState(state = {}) {
     return PLUS_GOPAY_STEP_DEFINITIONS;
   }
   if (paymentMethod === PLUS_PAYMENT_METHOD_PIX) {
-    if (state?.pixRedeemStopAfterRedeem) {
+    if (state?.pixRedeemContinueAfterRedeem !== true) {
       return PLUS_PIX_REDEEM_ONLY_STEP_DEFINITIONS;
     }
     if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
@@ -1268,7 +1269,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   pixRedeemApiBaseUrl: '',
   pixRedeemExternalApiKey: '',
   pixRedeemClientId: '',
-  pixRedeemStopAfterRedeem: false,
+  pixRedeemStopAfterRedeem: true,
+  pixRedeemContinueAfterRedeem: false,
   pixRedeemCdkeyPoolText: '',
   pixRedeemCdkeyUsage: {},
   chatGptApiSmsPoolText: '',
@@ -4199,6 +4201,8 @@ function normalizePersistentSettingValue(key, value) {
     case 'pixRedeemClientId':
       return String(value || '').trim();
     case 'pixRedeemStopAfterRedeem':
+      return Boolean(value);
+    case 'pixRedeemContinueAfterRedeem':
       return Boolean(value);
     case 'pixRedeemCdkeyPoolText': {
       const seen = new Set();

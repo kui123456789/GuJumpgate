@@ -397,7 +397,7 @@
   }
 
   function shouldStopPixAfterRedeem(options = {}) {
-    return Boolean(options?.pixRedeemStopAfterRedeem);
+    return options?.pixRedeemContinueAfterRedeem !== true;
   }
 
   function normalizePlusPaymentMethod(value = '') {

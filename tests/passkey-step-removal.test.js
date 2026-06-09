@@ -51,10 +51,42 @@ test('openai registration flows go from signup code directly to profile', () => 
   ].forEach((options) => assertRegistrationPrefixHasNoPasskeyStep(options));
 });
 
-test('pix plus flow redeems a cdkey after registration before OAuth', () => {
+test('pix plus flow stops after cdkey redeem by default', () => {
   const keys = keysFor({
     plusModeEnabled: true,
     plusPaymentMethod: 'pix',
+  });
+
+  assert.deepEqual(keys, [
+    'open-chatgpt',
+    'submit-signup-email',
+    'fill-password',
+    'fetch-signup-code',
+    'fill-profile',
+    'pix-redeem',
+  ]);
+  assert.equal(keys.includes('oauth-login'), false);
+  assert.equal(keys.includes('fetch-login-code'), false);
+  assert.equal(keys.includes('confirm-oauth'), false);
+  assert.equal(keys.includes('platform-verify'), false);
+  assert.equal(keys.includes('plus-checkout-create'), false);
+  assert.equal(keys.includes('plus-checkout-billing'), false);
+  assert.equal(keys.includes('paypal-approve'), false);
+  assert.equal(keys.includes('gopay-subscription-confirm'), false);
+
+  const redeemStep = getSteps({
+    plusModeEnabled: true,
+    plusPaymentMethod: 'pix',
+  }).find((step) => step.key === 'pix-redeem');
+  assert.equal(redeemStep?.title, 'Pix 卡密兑换 Plus');
+  assert.equal(redeemStep?.command, 'pix-redeem');
+});
+
+test('pix plus flow can continue OAuth after cdkey redeem when selected', () => {
+  const keys = keysFor({
+    plusModeEnabled: true,
+    plusPaymentMethod: 'pix',
+    pixRedeemContinueAfterRedeem: true,
   });
 
   assert.deepEqual(keys.slice(0, 7), [
@@ -70,13 +102,6 @@ test('pix plus flow redeems a cdkey after registration before OAuth', () => {
   assert.equal(keys.includes('plus-checkout-billing'), false);
   assert.equal(keys.includes('paypal-approve'), false);
   assert.equal(keys.includes('gopay-subscription-confirm'), false);
-
-  const redeemStep = getSteps({
-    plusModeEnabled: true,
-    plusPaymentMethod: 'pix',
-  }).find((step) => step.key === 'pix-redeem');
-  assert.equal(redeemStep?.title, 'Pix 卡密兑换 Plus');
-  assert.equal(redeemStep?.command, 'pix-redeem');
 });
 
 test('pix plus flow can stop after cdkey redeem', () => {

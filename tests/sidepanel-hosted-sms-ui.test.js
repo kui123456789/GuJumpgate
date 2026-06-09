@@ -7,6 +7,7 @@ const rootDir = path.resolve(__dirname, '..');
 const sidepanelJs = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.js'), 'utf8');
 const sidepanelHtml = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.html'), 'utf8');
 const sidepanelCss = fs.readFileSync(path.join(rootDir, 'sidepanel', 'sidepanel.css'), 'utf8');
+const backgroundJs = fs.readFileSync(path.join(rootDir, 'background.js'), 'utf8');
 const customEmailPoolManagerJs = fs.readFileSync(path.join(rootDir, 'sidepanel', 'custom-email-pool-manager.js'), 'utf8');
 
 test('sidepanel exposes hosted SMS provider controls', () => {
@@ -120,8 +121,28 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
   );
   assert.match(
     sidepanelJs,
-    /inputPixRedeemStopAfterRedeem\.checked\s*=\s*Boolean\(state\?\.pixRedeemStopAfterRedeem\)/,
-    '恢复配置时应回填 Pix 兑换后停止开关'
+    /inputPixRedeemStopAfterRedeem\.checked\s*=\s*state\?\.pixRedeemContinueAfterRedeem\s*===\s*true\s*\?\s*false\s*:\s*true/,
+    '恢复配置时应默认勾选 Pix 兑换后停止，只有明确继续后链才取消'
+  );
+  assert.match(
+    sidepanelJs,
+    /let\s+currentPixRedeemStopAfterRedeem\s*=\s*true/,
+    '侧栏步骤预览应默认按 Pix 第 6 步后停止'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemContinueAfterRedeem:\s*!Boolean\(inputPixRedeemStopAfterRedeem\?\.checked\)/,
+    '保存配置时应写入是否继续 Pix 后续 OAuth 后链'
+  );
+  assert.match(
+    backgroundJs,
+    /pixRedeemStopAfterRedeem:\s*true/,
+    '后台持久化默认值应按 Pix 第 6 步后停止'
+  );
+  assert.match(
+    backgroundJs,
+    /pixRedeemContinueAfterRedeem:\s*false/,
+    '后台默认不继续 Pix 后续 OAuth 后链'
   );
   assert.match(
     sidepanelJs,
