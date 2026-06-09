@@ -391,7 +391,8 @@
           return candidate.hostname === 'chatgpt.com'
             && candidate.pathname.startsWith('/checkout/');
         case 'paypal-flow':
-          return candidate.hostname.endsWith('paypal.com');
+          return candidate.hostname.endsWith('paypal.com')
+            || /pm-redirects\.stripe\.com/i.test(candidate.hostname);
         case 'gopay-flow':
           return /gopay|gojek/i.test(candidate.hostname);
         default:
@@ -417,6 +418,8 @@
       if (normalizedUrl.includes('duckduckgo.com/email/settings/autofill')) return 'duck-mail';
       if (normalizedUrl.includes('2925.com')) return 'mail-2925';
       if (normalizedHostname === 'pay.openai.com' || normalizedHostname === 'checkout.stripe.com') return 'plus-checkout';
+      if (/pm-redirects\.stripe\.com/i.test(normalizedHostname)
+        || /pm-redirects\.stripe\.com/i.test(normalizedUrl)) return 'paypal-flow';
       if (normalizedHostname === 'www.paypal.com' || normalizedHostname === 'paypal.com') return 'paypal-flow';
       if (isSignupEntryHost(normalizedHostname)) return 'chatgpt';
       return 'unknown-source';

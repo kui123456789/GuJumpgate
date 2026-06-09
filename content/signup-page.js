@@ -146,7 +146,7 @@ async function handleCommand(message) {
     case 'CHECK_PHONE_RESEND_ERROR':
       return phoneAuthHelpers.checkPhoneResendError();
     case 'RETURN_TO_ADD_PHONE':
-      return await phoneAuthHelpers.returnToAddPhone();
+      return await phoneAuthHelpers.returnToAddPhone(undefined, message.payload || {});
     case 'ENSURE_SIGNUP_ENTRY_READY':
       return await ensureSignupEntryReady();
     case 'ENSURE_SIGNUP_PHONE_ENTRY_READY':
@@ -3359,6 +3359,7 @@ const phoneAuthHelpers = self.MultiPagePhoneAuth?.createPhoneAuthHelpers?.({
     throw new Error('Phone auth helpers are unavailable.');
   },
   checkPhoneResendError: () => ({ hasError: false, reason: '', message: '', url: location.href }),
+  getAddPhoneErrorText: () => '',
   returnToAddPhone: async () => {
     throw new Error('Phone auth helpers are unavailable.');
   },
@@ -4323,6 +4324,9 @@ function inspectLoginAuthState() {
   const addPhoneDelivery = addPhonePage
     ? (phoneAuthHelpers.getAddPhoneDeliveryInfo?.() || { channel: '', text: '', candidates: [] })
     : { channel: '', text: '', candidates: [] };
+  const addPhoneErrorText = addPhonePage
+    ? String(phoneAuthHelpers.getAddPhoneErrorText?.() || '').trim()
+    : '';
   const phoneVerificationPage = isPhoneVerificationPageReady();
   const consentReady = isStep8Ready();
   const oauthConsentPage = isOAuthConsentPage();
@@ -4355,6 +4359,7 @@ function inspectLoginAuthState() {
     addPhoneDeliveryChannel: addPhoneDelivery.channel || '',
     addPhoneDeliveryText: addPhoneDelivery.text || '',
     addPhoneWhatsApp: addPhoneDelivery.channel === 'whatsapp',
+    addPhoneErrorText,
     addEmailPage,
     phoneVerificationPage,
     phoneVerificationDeliveryChannel: phoneVerificationDelivery.channel || '',
@@ -6668,6 +6673,9 @@ function getStep8State() {
   const addPhoneDelivery = isAddPhonePageReady()
     ? (phoneAuthHelpers.getAddPhoneDeliveryInfo?.() || { channel: '', text: '' })
     : { channel: '', text: '' };
+  const addPhoneErrorText = isAddPhonePageReady()
+    ? String(phoneAuthHelpers.getAddPhoneErrorText?.() || '').trim()
+    : '';
   const phoneVerificationDelivery = isPhoneVerificationPageReady()
     ? (phoneAuthHelpers.getPhoneVerificationDeliveryInfo?.() || { channel: '', text: '' })
     : { channel: '', text: '' };
@@ -6683,6 +6691,7 @@ function getStep8State() {
     addPhoneDeliveryChannel: addPhoneDelivery.channel || '',
     addPhoneDeliveryText: addPhoneDelivery.text || '',
     addPhoneWhatsApp: addPhoneDelivery.channel === 'whatsapp',
+    addPhoneErrorText,
     addEmailPage: isAddEmailPageReady(),
     phoneVerificationPage: isPhoneVerificationPageReady(),
     phoneVerificationDeliveryChannel: phoneVerificationDelivery.channel || '',

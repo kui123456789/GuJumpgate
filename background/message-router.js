@@ -150,11 +150,13 @@
       patchMail2925Account,
       patchHotmailAccount,
       pollContributionStatus,
+      pausePpBoomJob = null,
       registerTab,
       requestStop,
       probeIpProxyExit,
       handleCloudflareSecurityBlocked,
       resetState,
+      resumePpBoomJob = null,
       resumeAutoRun,
       scheduleAutoRun,
       sendTabMessageUntilStopped = null,
@@ -2386,6 +2388,22 @@
             targetEndpoint: String(result?.targetEndpoint || '').trim(),
             diagnostics: String(result?.diagnostics || '').trim(),
           };
+        }
+
+        case 'PPBOOM_PAUSE_JOB': {
+          if (typeof pausePpBoomJob !== 'function') {
+            throw new Error('PPBoom 暂停能力尚未接入。');
+          }
+          const result = await pausePpBoomJob();
+          return { ok: true, state: result };
+        }
+
+        case 'PPBOOM_RESUME_JOB': {
+          if (typeof resumePpBoomJob !== 'function') {
+            throw new Error('PPBoom 继续能力尚未接入。');
+          }
+          const result = await resumePpBoomJob();
+          return { ok: true, state: result };
         }
 
         case 'FETCH_DUCK_EMAIL': {

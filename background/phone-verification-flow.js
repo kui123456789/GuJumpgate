@@ -84,6 +84,9 @@
     const DEFAULT_PHONE_SUBMIT_ATTEMPTS = 3;
     const DEFAULT_PHONE_NUMBER_MAX_USES = 3;
     const DEFAULT_PHONE_NUMBER_REPLACEMENT_LIMIT = 3;
+    const WHATSAPP_PHONE_VERIFICATION_RETRY_LIMIT_MIN = 1;
+    const WHATSAPP_PHONE_VERIFICATION_RETRY_LIMIT_MAX = 20;
+    const DEFAULT_WHATSAPP_PHONE_VERIFICATION_RETRY_MAX_ATTEMPTS = 5;
     const DEFAULT_PHONE_PRICE_LOOKUP_ATTEMPTS = 3;
     const MAX_PHONE_PRICE_CANDIDATES = 8;
     const DEFAULT_PHONE_ACTIVATION_RETRY_ROUNDS = 3;
@@ -128,6 +131,30 @@
     const FREE_PHONE_REUSE_PREPARE_TIMEOUT_MS = 20000;
     const FREE_PHONE_REUSE_PREPARE_INTERVAL_MS = 2000;
     const FREE_PHONE_REUSE_PREPARE_MAX_ROUNDS = 10;
+
+    function normalizeVerificationResendCount(value, fallback = 0) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return Math.max(0, Math.floor(Number(fallback) || 0));
+      }
+      return Math.max(0, Math.floor(numeric));
+    }
+
+    function createVerificationResendBudget(state = {}) {
+      let remaining = normalizeVerificationResendCount(state?.verificationResendCount, 0);
+      return {
+        get remaining() {
+          return remaining;
+        },
+        consume() {
+          if (remaining <= 0) {
+            return false;
+          }
+          remaining -= 1;
+          return true;
+        },
+      };
+    }
     const PHONE_SMS_FAILURE_SKIP_THRESHOLD = 2;
     const MAX_ACTIVATION_PRICE_HINTS = 256;
     const HERO_SMS_COUNTRY_BY_PHONE_PREFIX = Object.freeze([
@@ -525,6 +552,17 @@
       return Math.max(1, Math.min(100, parsed));
     }
 
+    function normalizeWhatsAppPhoneVerificationRetryMaxAttempts(value) {
+      const parsed = Math.floor(Number(value));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return DEFAULT_WHATSAPP_PHONE_VERIFICATION_RETRY_MAX_ATTEMPTS;
+      }
+      return Math.max(
+        WHATSAPP_PHONE_VERIFICATION_RETRY_LIMIT_MIN,
+        Math.min(WHATSAPP_PHONE_VERIFICATION_RETRY_LIMIT_MAX, parsed)
+      );
+    }
+
     function normalizePhoneActivationRetryRounds(value) {
       const parsed = Math.floor(Number(value));
       if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -702,6 +740,14 @@
       return /无法向此电话号码发送验证码|无法向.*(?:电话号码|手机号|号码).*发送(?:验证码|短信)|(?:不能|无法).*发送.*(?:验证码|短信).*(?:电话号码|手机号|号码)|(?:cannot|can't|could\s*not|couldn't|unable\s+to)\s+(?:send|deliver).{0,80}(?:verification\s+code|code|sms|text(?:\s+message)?).{0,80}(?:phone|number)|(?:verification\s+code|sms|text(?:\s+message)?).{0,80}(?:cannot|can't|could\s*not|couldn't|unable\s+to).{0,80}(?:send|deliver)/i.test(text);
     }
 
+    function isWhatsAppSmsFallbackError(value) {
+      const text = String(value || '').replace(/\s+/g, ' ').trim();
+      if (!text) {
+        return false;
+      }
+      return /无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)[\s\S]{0,100}(?:切换|改用|转为|转到)[\s\S]{0,60}whats\s*app|(?:switched|fallback|fall\s*back|changed)[\s\S]{0,100}whats\s*app[\s\S]{0,100}(?:sms|text|phone\s+number|verification\s+code|code)/i.test(text);
+    }
+
     function isWhatsAppPhoneResendResult(value) {
       if (!value) {
         return false;
@@ -753,11 +799,16 @@
         return false;
       }
       const text = [
+        pageState.addPhoneErrorText,
+        pageState.errorText,
         pageState.addPhoneDeliveryText,
         Array.isArray(pageState.addPhoneDeliveryCandidates)
           ? pageState.addPhoneDeliveryCandidates.join(' ')
           : '',
       ].filter(Boolean).join(' ');
+      if (isWhatsAppSmsFallbackError(text)) {
+        return false;
+      }
       if (isMixedSmsWhatsAppDeliverySelectorText(text)) {
         return false;
       }
@@ -1361,6 +1412,8 @@
         add_phone_rejected: '添加手机号被拒绝',
         activation_not_found: '接码订单不存在或已失效',
         resend_phone_banned: 'OpenAI 无法向该号码发送短信',
+        phone_delivery_refused: 'OpenAI 无法向该号码发送短信',
+        whatsapp_sms_fallback: 'OpenAI 无法发短信并切换到 WhatsApp',
         phone_max_usage_exceeded: '手机号达到使用上限',
         resend_server_error: '重发短信后进入服务器错误页',
         whatsapp_resend_channel: '页面重发入口切换为 WhatsApp 通道',
@@ -2489,7 +2542,7 @@
       if (message.startsWith(PHONE_RESEND_BANNED_NUMBER_ERROR_PREFIX)) {
         return true;
       }
-      return /无法向此电话号码发送短信|无法向此手机号发送短信|无法发送短信到此电话号码|无法发送短信到此手机号|can(?:not|'t)\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i.test(message);
+      return /无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)|无法发送(?:短信|验证码)到(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)|can(?:not|'t)\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i.test(message);
     }
 
     function isPhoneResendServerError(error) {
@@ -5867,7 +5920,7 @@
       return result || {};
     }
 
-    async function returnToAddPhone(tabId) {
+    async function returnToAddPhone(tabId, options = {}) {
       const visibleStep = normalizeLogStep(activePhoneVerificationLogStep) || 9;
       const timeoutMs = typeof getOAuthFlowStepTimeoutMs === 'function'
         ? await getOAuthFlowStepTimeoutMs(30000, { step: visibleStep, actionLabel: 'return to add-phone page' })
@@ -5875,7 +5928,7 @@
       const result = await sendToContentScriptResilient('signup-page', {
         type: 'RETURN_TO_ADD_PHONE',
         source: 'background',
-        payload: {},
+        payload: options || {},
       }, {
         timeoutMs,
         responseTimeoutMs: timeoutMs,
@@ -6658,13 +6711,14 @@
       }
     }
 
-    async function waitForPhoneCodeOrRotateNumber(tabId, state, activation) {
+    async function waitForPhoneCodeOrRotateNumber(tabId, state, activation, options = {}) {
       const normalizedActivation = normalizeActivation(activation);
       if (!normalizedActivation) {
         throw new Error('缺少手机号接码订单。');
       }
       const providerLabel = getPhoneSmsProviderLabel(normalizedActivation.provider);
       const usePageResend = normalizedActivation.provider !== PHONE_SMS_PROVIDER_5SIM;
+      const resendBudget = options?.resendBudget || createVerificationResendBudget(state);
 
       const waitSeconds = normalizePhoneCodeWaitSeconds(state?.phoneCodeWaitSeconds);
       const timeoutWindows = normalizePhoneCodeTimeoutWindows(state?.phoneCodeTimeoutWindows);
@@ -6797,10 +6851,6 @@
           }
 
           if (windowIndex < timeoutWindows) {
-            await addLog(
-              `步骤 9：号码 ${normalizedActivation.phoneNumber} 在 ${waitSeconds} 秒内未收到短信，正在请求再次发送。`,
-              'warn'
-            );
             if (!usePageResend) {
               await addLog(
                 `步骤 9：${providerLabel} 保持当前验证码页会话并跳过页面重发，避免触发 405 或重发限流；继续轮询当前号码。`,
@@ -6810,11 +6860,22 @@
             }
             if (resendTriggeredForCurrentNumber) {
               await addLog(
-                `步骤 9：号码 ${normalizedActivation.phoneNumber} 已触发过一次页面重发；为避免限流，将继续轮询不再点击重发。`,
+                `步骤 9：号码 ${normalizedActivation.phoneNumber} 已触发过一次页面重发；为避免限流，将继续轮询不再点击重发（剩余 ${resendBudget.remaining} 次重发）。`,
                 'warn'
               );
               continue;
             }
+            if (!resendBudget.consume()) {
+              await addLog(
+                `步骤 9：号码 ${normalizedActivation.phoneNumber} 在 ${waitSeconds} 秒内未收到短信，但“验证码重发”次数已用完，将继续轮询不再自动重发。`,
+                'warn'
+              );
+              continue;
+            }
+            await addLog(
+              `步骤 9：号码 ${normalizedActivation.phoneNumber} 在 ${waitSeconds} 秒内未收到短信，正在请求再次发送（剩余 ${resendBudget.remaining} 次重发）。`,
+              'warn'
+            );
             try {
               const resendProbeResult = await resendPhoneVerificationCode(tabId, { probeOnly: true });
               if (isWhatsAppPhoneResendResult(resendProbeResult)) {
@@ -6938,6 +6999,7 @@
       const purpose = String(options?.purpose || 'signup').trim() || 'signup';
       const actionLabelPrefix = String(options?.actionLabelPrefix || 'signup phone verification').trim() || 'phone verification';
       const onPollStatus = typeof options?.onPollStatus === 'function' ? options.onPollStatus : null;
+      const resendBudget = options?.resendBudget || createVerificationResendBudget(state);
       if (!normalizedActivation) {
         throw new Error(options?.missingActivationMessage || `步骤 ${visibleStep}：手机号激活记录缺失，请重新执行前置步骤。`);
       }
@@ -7004,8 +7066,16 @@
             }
 
             if (windowIndex < timeoutWindows) {
+              if (!resendBudget.consume()) {
+                await addLog(
+                  `步骤 ${visibleStep}：${normalizedActivation.phoneNumber} 在 ${waitSeconds} 秒内未收到短信，但“验证码重发”次数已用完，将继续等待不再自动重发。`,
+                  'warn',
+                  { step: visibleStep, stepKey }
+                );
+                continue;
+              }
               await addLog(
-                `步骤 ${visibleStep}：${normalizedActivation.phoneNumber} 在 ${waitSeconds} 秒内未收到短信，准备请求重发。`,
+                `步骤 ${visibleStep}：${normalizedActivation.phoneNumber} 在 ${waitSeconds} 秒内未收到短信，准备请求重发（剩余 ${resendBudget.remaining} 次重发）。`,
                 'warn',
                 { step: visibleStep, stepKey }
               );
@@ -7131,12 +7201,14 @@
         };
 
         let shouldCancelActivation = true;
+        const resendBudget = createVerificationResendBudget(state);
         try {
           for (let attempt = 1; attempt <= DEFAULT_PHONE_SUBMIT_ATTEMPTS; attempt += 1) {
             throwIfStopped();
             state = await getState();
             await assertSignupPhoneStillApplicable('waiting for SMS code');
             const code = await waitForSignupPhoneCode(state, activation, {
+              resendBudget,
               onPollStatus: async () => {
                 await assertSignupPhoneStillApplicable('while waiting for SMS code');
               },
@@ -7185,6 +7257,14 @@
                 throw new Error(`步骤 4：手机验证码连续 ${DEFAULT_PHONE_SUBMIT_ATTEMPTS} 次被拒绝：${invalidErrorText}`);
               }
 
+              if (!resendBudget.consume()) {
+                await addLog(
+                  '步骤 4：手机验证码被拒，但“验证码重发”次数已用完，不再自动请求新短信或点击重新发送。',
+                  'warn',
+                  { step: 4, stepKey: 'fetch-signup-code' }
+                );
+                continue;
+              }
               const requestAdditionalResult = await requestAdditionalPhoneSms(state, activation);
               const nextActivation = normalizeActivation(
                 requestAdditionalResult?.activation
@@ -7214,7 +7294,7 @@
                 });
               }
               await addLog(
-                `步骤 4：手机验证码被拒绝，已请求新短信（${attempt + 1}/${DEFAULT_PHONE_SUBMIT_ATTEMPTS}）。`,
+                `步骤 4：手机验证码被拒绝，已请求新短信（${attempt + 1}/${DEFAULT_PHONE_SUBMIT_ATTEMPTS}，剩余 ${resendBudget.remaining} 次重发）。`,
                 'warn',
                 { step: 4, stepKey: 'fetch-signup-code' }
               );
@@ -7395,6 +7475,7 @@
           visibleStep,
         });
         let shouldCancelActivation = true;
+        const resendBudget = createVerificationResendBudget(state);
 
         try {
           for (let attempt = 1; attempt <= DEFAULT_PHONE_SUBMIT_ATTEMPTS; attempt += 1) {
@@ -7402,6 +7483,7 @@
             state = await getState();
             const code = await waitForLoginPhoneCode(state, activation, {
               visibleStep,
+              resendBudget,
               onTimeoutWindow: async () => {
                 try {
                   await resendLoginPhoneVerificationCode(tabId, { visibleStep });
@@ -7444,6 +7526,14 @@
                 throw new Error(`步骤 ${visibleStep}：登录手机验证码连续 ${DEFAULT_PHONE_SUBMIT_ATTEMPTS} 次被拒绝：${invalidErrorText}`);
               }
 
+              if (!resendBudget.consume()) {
+                await addLog(
+                  `步骤 ${visibleStep}：登录手机验证码被拒，但“验证码重发”次数已用完，不再自动请求新短信或点击重新发送。`,
+                  'warn',
+                  { step: visibleStep, stepKey: 'fetch-login-code' }
+                );
+                continue;
+              }
               const requestAdditionalResult = await requestAdditionalPhoneSms(state, activation);
               const nextActivation = normalizeActivation(
                 requestAdditionalResult?.activation
@@ -7472,7 +7562,7 @@
                 });
               }
               await addLog(
-                `步骤 ${visibleStep}：登录手机验证码被拒绝，已请求新短信（${attempt + 1}/${DEFAULT_PHONE_SUBMIT_ATTEMPTS}）。`,
+                `步骤 ${visibleStep}：登录手机验证码被拒绝，已请求新短信（${attempt + 1}/${DEFAULT_PHONE_SUBMIT_ATTEMPTS}，剩余 ${resendBudget.remaining} 次重发）。`,
                 'warn',
                 { step: visibleStep, stepKey: 'fetch-login-code' }
               );
@@ -7516,11 +7606,15 @@
       let activation = normalizeActivation(state[PHONE_ACTIVATION_STATE_KEY]);
       let pageState = initialPageState || await readPhonePageState(tabId);
       let shouldCancelActivation = false;
-      let remainingResendRequests = Math.max(0, Number(state.verificationResendCount) || 0);
+      const resendBudget = createVerificationResendBudget(state);
       const maxNumberReplacementAttempts = normalizePhoneReplacementLimit(
         state.phoneVerificationReplacementLimit
       );
+      const maxWhatsAppAutoRetryAttempts = normalizeWhatsAppPhoneVerificationRetryMaxAttempts(
+        state.whatsappPhoneVerificationRestartMaxAttempts
+      );
       let usedNumberReplacementAttempts = 0;
+      let usedWhatsAppAutoRetryAttempts = 0;
       let preferredActivationExhausted = false;
       let preferReuseExistingActivationOnAddPhone = false;
       let addPhoneReentryWithSameActivation = 0;
@@ -7805,14 +7899,26 @@
         );
       };
 
-      const rotateActivationAfterAddPhoneFailure = async (failureReason, failureCode, submitState = {}) => {
+      const rotateActivationAfterAddPhoneFailure = async (failureReason, failureCode, submitState = {}, options = {}) => {
+        const forceAddPhoneReload = Boolean(options?.forceAddPhoneReload);
         await markPreferredActivationExhausted(failureCode || failureReason);
-        usedNumberReplacementAttempts += 1;
-        if (usedNumberReplacementAttempts > maxNumberReplacementAttempts) {
-          throw buildPhoneReplacementLimitError(maxNumberReplacementAttempts, failureCode || 'add_phone_rejected');
+        if (forceAddPhoneReload) {
+          usedWhatsAppAutoRetryAttempts += 1;
+          if (usedWhatsAppAutoRetryAttempts > maxWhatsAppAutoRetryAttempts) {
+            throw new Error(
+              `步骤 9：WA 自动重试已达到 ${maxWhatsAppAutoRetryAttempts} 次，仍然遇到短信切换 WhatsApp，停止当前手机号验证。最后原因：${formatStep9Reason(failureCode || failureReason || 'whatsapp_sms_fallback')}。`
+            );
+          }
+        } else {
+          usedNumberReplacementAttempts += 1;
+          if (usedNumberReplacementAttempts > maxNumberReplacementAttempts) {
+            throw buildPhoneReplacementLimitError(maxNumberReplacementAttempts, failureCode || 'add_phone_rejected');
+          }
         }
         await addLog(
-          `步骤 9：添加手机号失败后正在更换号码（${formatStep9Reason(failureReason)}，${usedNumberReplacementAttempts}/${maxNumberReplacementAttempts}）。`,
+          forceAddPhoneReload
+            ? `步骤 9：添加手机号页提示已切换 WhatsApp，正在刷新 add-phone 并重新取号（WA ${usedWhatsAppAutoRetryAttempts}/${maxWhatsAppAutoRetryAttempts}）。`
+            : `步骤 9：添加手机号失败后正在更换号码（${formatStep9Reason(failureReason)}，${usedNumberReplacementAttempts}/${maxNumberReplacementAttempts}）。`,
           'warn'
         );
         if (shouldReleaseActivationOnReplacement(activation, shouldCancelActivation)) {
@@ -7830,7 +7936,13 @@
           phoneVerificationPage: false,
         };
         try {
-          const returned = await returnToAddPhone(tabId);
+          let returned = null;
+          if (forceAddPhoneReload) {
+            returned = await directNavigateToAddPhone('after WhatsApp add-phone fallback');
+          }
+          if (!returned) {
+            returned = await returnToAddPhone(tabId, { forceReload: forceAddPhoneReload });
+          }
           addPhoneSnapshot = {
             ...addPhoneSnapshot,
             ...returned,
@@ -7844,7 +7956,10 @@
           );
         }
         try {
-          const verified = await ensureAddPhonePageBeforeSubmit('after add-phone rejection');
+          const verified = await ensureAddPhonePageBeforeSubmit(
+            forceAddPhoneReload ? 'after WhatsApp add-phone fallback' : 'after add-phone rejection',
+            { allowDirectNavigation: forceAddPhoneReload }
+          );
           addPhoneSnapshot = {
             ...addPhoneSnapshot,
             ...verified,
@@ -7868,6 +7983,36 @@
           }
 
           if (pageState?.addPhonePage) {
+            const addPhoneErrorText = String(pageState?.addPhoneErrorText || pageState?.errorText || '').trim();
+            if (isWhatsAppSmsFallbackError(addPhoneErrorText)) {
+              const visibleStep = normalizeLogStep(activePhoneVerificationLogStep) || 9;
+              if (state?.whatsappPhoneVerificationRestartEnabled === false) {
+                throw new Error(
+                  `步骤 ${visibleStep}：添加手机号页提示短信已切换为 WhatsApp，但“WA 自动重试”开关已关闭。${addPhoneErrorText}`
+                );
+              }
+              if (activation) {
+                await rotateActivationAfterAddPhoneFailure(
+                  addPhoneErrorText,
+                  'whatsapp_sms_fallback',
+                  { ...pageState, errorText: addPhoneErrorText },
+                  { forceAddPhoneReload: true }
+                );
+                continue;
+              }
+              await addLog(
+                `步骤 ${visibleStep}：添加手机号页残留 WhatsApp 切换错误，当前无本地接码订单，将刷新 add-phone 后重新取号。`,
+                'warn'
+              );
+              const refreshed = await directNavigateToAddPhone('after stale WhatsApp add-phone fallback')
+                || await ensureAddPhonePageBeforeSubmit('after stale WhatsApp add-phone fallback', { allowDirectNavigation: true });
+              pageState = {
+                ...pageState,
+                ...refreshed,
+                addPhonePage: true,
+                phoneVerificationPage: false,
+              };
+            }
             if (isAddPhoneWhatsAppPageState(pageState)) {
               const visibleStep = normalizeLogStep(activePhoneVerificationLogStep) || 9;
               const deliveryLabel = pageState.addPhoneDeliveryText || 'WhatsApp';
@@ -7879,7 +8024,7 @@
                 throw buildStep9WhatsAppPageRestartError(pageState);
               }
               throw new Error(
-                `步骤 ${visibleStep}：当前添加手机号页面显示验证码通过 WhatsApp 发送，但“WA 重开”开关已关闭，无法继续自动读取验证码。${pageState?.url ? ` URL: ${pageState.url}` : ''}`.trim()
+                `步骤 ${visibleStep}：当前添加手机号页面显示验证码通过 WhatsApp 发送，但“WA 自动重试”开关已关闭，无法继续自动读取验证码。${pageState?.url ? ` URL: ${pageState.url}` : ''}`.trim()
               );
             }
             const addPhoneUrlText = String(pageState?.url || '').trim().toLowerCase();
@@ -7948,11 +8093,20 @@
                 throw submitError;
               }
               const submitErrorText = String(submitError?.message || submitError || 'unknown error');
-              if (isPhoneNumberDeliveryRefusedError(submitErrorText) || isRecoverableAddPhoneSubmitError(submitErrorText)) {
+              const submitWhatsAppFallback = isWhatsAppSmsFallbackError(submitErrorText);
+              if (submitWhatsAppFallback && state?.whatsappPhoneVerificationRestartEnabled === false) {
+                throw new Error(
+                  `步骤 9：添加手机号页提示短信已切换为 WhatsApp，但“WA 自动重试”开关已关闭。${submitErrorText}`
+                );
+              }
+              if (submitWhatsAppFallback || isPhoneNumberDeliveryRefusedError(submitErrorText) || isRecoverableAddPhoneSubmitError(submitErrorText)) {
                 await rotateActivationAfterAddPhoneFailure(
                   submitErrorText,
-                  isPhoneNumberDeliveryRefusedError(submitErrorText) ? 'phone_delivery_refused' : 'add_phone_submit_failed',
-                  { url: pageState?.url || '' }
+                  submitWhatsAppFallback
+                    ? 'whatsapp_sms_fallback'
+                    : (isPhoneNumberDeliveryRefusedError(submitErrorText) ? 'phone_delivery_refused' : 'add_phone_submit_failed'),
+                  { url: pageState?.url || '' },
+                  { forceAddPhoneReload: submitWhatsAppFallback }
                 );
                 continue;
               }
@@ -7960,6 +8114,12 @@
             }
             if (submitResult.addPhoneRejected) {
               const addPhoneRejectText = String(submitResult.errorText || submitResult.url || 'unknown error');
+              const rejectWhatsAppFallback = isWhatsAppSmsFallbackError(addPhoneRejectText);
+              if (rejectWhatsAppFallback && state?.whatsappPhoneVerificationRestartEnabled === false) {
+                throw new Error(
+                  `步骤 9：添加手机号页提示短信已切换为 WhatsApp，但“WA 自动重试”开关已关闭。${addPhoneRejectText}`
+                );
+              }
               if (isPhoneNumberUsedError(addPhoneRejectText)) {
                 usedNumberReplacementAttempts += 1;
                 if (usedNumberReplacementAttempts > maxNumberReplacementAttempts) {
@@ -7998,11 +8158,12 @@
                 };
                 continue;
               }
-              if (isPhoneNumberDeliveryRefusedError(addPhoneRejectText)) {
+              if (rejectWhatsAppFallback || isPhoneNumberDeliveryRefusedError(addPhoneRejectText)) {
                 await rotateActivationAfterAddPhoneFailure(
                   addPhoneRejectText,
-                  'phone_delivery_refused',
-                  submitResult || {}
+                  rejectWhatsAppFallback ? 'whatsapp_sms_fallback' : 'phone_delivery_refused',
+                  submitResult || {},
+                  { forceAddPhoneReload: rejectWhatsAppFallback }
                 );
                 continue;
               }
@@ -8024,8 +8185,15 @@
                   || submitResult?.url
                   || 'unknown error'
                 );
+                const retryWhatsAppFallback = isWhatsAppSmsFallbackError(retryRejectText);
+                if (retryWhatsAppFallback && state?.whatsappPhoneVerificationRestartEnabled === false) {
+                  throw new Error(
+                    `步骤 9：添加手机号页提示短信已切换为 WhatsApp，但“WA 自动重试”开关已关闭。${retryRejectText}`
+                  );
+                }
                 if (
                   isPhoneNumberUsedError(retryRejectText)
+                  || retryWhatsAppFallback
                   || isPhoneNumberDeliveryRefusedError(retryRejectText)
                   || isRecoverableAddPhoneSubmitError(retryRejectText)
                 ) {
@@ -8033,8 +8201,11 @@
                     `add-phone keeps rejecting ${activation.phoneNumber} (${retryRejectText})`,
                     isPhoneNumberUsedError(retryRejectText)
                       ? 'phone_number_used'
-                      : (isPhoneNumberDeliveryRefusedError(retryRejectText) ? 'phone_delivery_refused' : 'add_phone_rejected'),
-                    submitResult || {}
+                      : (retryWhatsAppFallback
+                        ? 'whatsapp_sms_fallback'
+                        : (isPhoneNumberDeliveryRefusedError(retryRejectText) ? 'phone_delivery_refused' : 'add_phone_rejected')),
+                    submitResult || {},
+                    { forceAddPhoneReload: retryWhatsAppFallback }
                   );
                   continue;
                 }
@@ -8096,7 +8267,7 @@
               throw buildStep9WhatsAppPageRestartError(pageState);
             }
             throw new Error(
-              `步骤 ${visibleStep}：当前手机验证码页显示验证码通过 WhatsApp 发送，但“WA 重开”开关已关闭，无法继续自动读取验证码。${pageState?.url ? ` URL: ${pageState.url}` : ''}`.trim()
+              `步骤 ${visibleStep}：当前手机验证码页显示验证码通过 WhatsApp 发送，但“WA 自动重试”开关已关闭，无法继续自动读取验证码。${pageState?.url ? ` URL: ${pageState.url}` : ''}`.trim()
             );
           }
 
@@ -8106,7 +8277,9 @@
           for (let attempt = 1; attempt <= DEFAULT_PHONE_SUBMIT_ATTEMPTS; attempt += 1) {
             throwIfStopped();
 
-            const codeResult = await waitForPhoneCodeOrRotateNumber(tabId, state, activation);
+            const codeResult = await waitForPhoneCodeOrRotateNumber(tabId, state, activation, {
+              resendBudget,
+            });
             if (codeResult.replaceNumber) {
               await markPreferredActivationExhausted(codeResult.reason || 'sms_timeout');
               shouldReplaceNumber = true;
@@ -8181,8 +8354,7 @@
                 break;
               }
 
-              if (remainingResendRequests > 0) {
-                remainingResendRequests -= 1;
+              if (resendBudget.consume()) {
                 try {
                   const resendProbeResult = await resendPhoneVerificationCode(tabId, { probeOnly: true });
                   if (isWhatsAppPhoneResendResult(resendProbeResult)) {
@@ -8224,7 +8396,7 @@
                   break;
                 }
                 await addLog(
-                  `步骤 9：手机验证码被拒，已请求再次发送短信（剩余 ${remainingResendRequests} 次重发）。`,
+                  `步骤 9：手机验证码被拒，已请求再次发送短信（剩余 ${resendBudget.remaining} 次重发）。`,
                   'warn'
                 );
               } else {
@@ -8390,10 +8562,12 @@
       completeLoginPhoneVerificationFlow,
       completePhoneVerificationFlow,
       completeSignupPhoneVerificationFlow,
+      createVerificationResendBudget,
       finalizeLoginPhoneActivationAfterSuccess,
       finalizeSignupPhoneActivationAfterSuccess,
       isPhoneResendBannedNumberError,
       normalizeActivation,
+      normalizeVerificationResendCount,
       pollPhoneActivationCode,
       prepareLoginPhoneActivation,
       prepareSignupPhoneActivation,

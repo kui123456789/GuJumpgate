@@ -79,16 +79,17 @@
 
 ### 4. 配置代理
 
-现在推荐且能走的路径是 **全程JP代理**
-这条路径还是可以稳定出试用和正常激活PLUS的
+现在推荐且仍可用的路径是 **全程 JP 代理**。
+这条路径仍可以稳定出试用并正常激活 Plus。
 
-#### 方案一：直接使用 (关闭云端转换) -推荐
+#### 方案一：直接使用（关闭云端转换，推荐）
 
-直接开启代理工具的规则/全局 JP代理，即可开始使用
+直接开启代理工具的规则 / 全局 JP 代理，即可开始使用。
 
-#### 方案而：使用云端转换 (公益)
+#### 方案二：云端转换（公益，当前不可用）
 
-直接开启代理工具的规则/全局 JP代理，选择云端转换，即可开始使用
+> [!WARNING]
+> 长链接链路当前已不可用，暂不建议开启云端转换。该入口仅保留用于后续恢复或测试。
 
 #### 方案三：本地配置代理
 
@@ -106,6 +107,13 @@
 
 - Windows：`start-hotmail-helper.bat`
 - macOS：`start-hotmail-helper.command`
+
+如果启用 PPBoom / PP 爆破模式，请额外启动 PPBoom 本地助手：
+
+- Windows：`start-ppboom.bat`
+- macOS：`start-ppboom.command`
+
+macOS 首次运行如提示没有权限，可在终端进入解压目录后执行：`chmod +x start-hotmail-helper.command start-ppboom.command`
 
 ![运行 start-hotmail-helper 脚本](docs/images/github-readme-1779193024860.png)
 
@@ -147,6 +155,20 @@
 ![选择邮箱渠道](docs/images/readme-mail-provider.png)
 
 然后填写或导入各自邮箱渠道所需的配置。
+
+#### PP 爆破模式
+
+PPBoom / PP 爆破模式适合在独立指纹浏览器环境中跑 PayPal 相关链路。启用前请先确认 PPBoom 本地助手和指纹浏览器都已启动。
+
+1. 手动运行扩展文件夹内的 `start-ppboom.bat` 或 `start-ppboom.command`。
+2. 启动 RoxyBrowser 或 AdsPower，并准备可用的窗口 / Profile。(选择移动端指纹，推荐IOS，窗口推荐配置动态住宅代理)
+3. 在侧边栏启用 PPBoom / PP 爆破模式。
+4. 在 PPBoom 浏览器选项中选择 `RoxyBrowser` 或 `AdsPower`。
+5. 配置对应的 API 地址、API Key 和窗口 / Profile ID。
+6. 配置 JP 代理，推荐使用动态住宅代理。
+7. 推荐指纹浏览器配置
+
+![配置 PP 爆破模式](docs/images/5446fb4f-7e88-4609-8a35-66e753fb1fb2.png)
 
 #### 接码设置
 

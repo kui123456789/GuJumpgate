@@ -443,6 +443,37 @@ const btnToggleHotmailList = document.getElementById('btn-toggle-hotmail-list');
 const hotmailFormShell = document.getElementById('hotmail-form-shell');
 const hotmailListShell = document.getElementById('hotmail-list-shell');
 const hotmailAccountsList = document.getElementById('hotmail-accounts-list');
+const ppboomSection = document.getElementById('ppboom-section');
+const displayPpboomStatus = document.getElementById('display-ppboom-status');
+const inputPpboomEnabled = document.getElementById('input-ppboom-enabled');
+const ppboomSettingsShell = document.getElementById('ppboom-settings-shell');
+const selectPpboomBrowserBackend = document.getElementById('select-ppboom-browser-backend');
+const rowPpboomAdsPowerApiBase = document.getElementById('row-ppboom-adspower-api-base');
+const inputPpboomAdsPowerApiBase = document.getElementById('input-ppboom-adspower-api-base');
+const rowPpboomAdsPowerApiKey = document.getElementById('row-ppboom-adspower-api-key');
+const inputPpboomAdsPowerApiKey = document.getElementById('input-ppboom-adspower-api-key');
+const rowPpboomRoxyBrowserApiBase = document.getElementById('row-ppboom-roxybrowser-api-base');
+const inputPpboomRoxyBrowserApiBase = document.getElementById('input-ppboom-roxybrowser-api-base');
+const rowPpboomRoxyBrowserApiKey = document.getElementById('row-ppboom-roxybrowser-api-key');
+const inputPpboomRoxyBrowserApiKey = document.getElementById('input-ppboom-roxybrowser-api-key');
+const rowPpboomAdsPowerProfileId = document.getElementById('row-ppboom-adspower-profile-id');
+const inputPpboomAdsPowerProfileId = document.getElementById('input-ppboom-adspower-profile-id');
+const rowPpboomRoxyBrowserProfileId = document.getElementById('row-ppboom-roxybrowser-profile-id');
+const inputPpboomRoxyBrowserProfileId = document.getElementById('input-ppboom-roxybrowser-profile-id');
+const inputPpboomStripePublishableKey = document.getElementById('input-ppboom-stripe-publishable-key');
+const inputPpboomDeviceId = document.getElementById('input-ppboom-device-id');
+const inputPpboomUserAgent = document.getElementById('input-ppboom-user-agent');
+const inputPpboomMaxAttempts = document.getElementById('input-ppboom-max-attempts');
+const selectPpboomPaymentLocale = document.getElementById('select-ppboom-payment-locale');
+const inputPpboomCheckoutRebuildMaxAttempts = document.getElementById('input-ppboom-checkout-rebuild-max-attempts');
+const inputPpboomDefaultProxy = document.getElementById('input-ppboom-default-proxy');
+const rowPpboomProviderProxy = document.getElementById('row-ppboom-provider-proxy');
+const inputPpboomProviderProxy = document.getElementById('input-ppboom-provider-proxy');
+const btnSavePpboomSettings = document.getElementById('btn-save-ppboom-settings');
+const btnClearPpboomSettings = document.getElementById('btn-clear-ppboom-settings');
+const btnPpboomPause = document.getElementById('btn-ppboom-pause');
+const btnPpboomResume = document.getElementById('btn-ppboom-resume');
+const displayPpboomRuntime = document.getElementById('display-ppboom-runtime');
 const inputMail2925Email = document.getElementById('input-mail2925-email');
 const inputMail2925Password = document.getElementById('input-mail2925-password');
 const inputMail2925Import = document.getElementById('input-mail2925-import');
@@ -666,6 +697,9 @@ const PLUS_CHECKOUT_MODE_LABELS = Object.freeze({
   [PLUS_CHECKOUT_MODE_US_PP]: '美区PP Plus Checkout',
   [PLUS_CHECKOUT_MODE_JP_PP]: '日区PP Plus Checkout',
 });
+const PPBOOM_DEFAULT_MAX_ATTEMPTS = 10;
+const PPBOOM_MAX_ATTEMPTS_LIMIT = 20;
+const PPBOOM_ALLOWED_PAYMENT_LOCALES = new Set(['en', 'zh-CN', 'zh-TW', 'ja', 'ko', 'de', 'fr', 'es', 'id', 'pt-BR']);
 const PLUS_CHECKOUT_PROFILE_SETTING_KEYS = Object.freeze([
   'hostedCheckoutVerificationUrl',
   'hostedCheckoutPhoneNumber',
@@ -758,7 +792,7 @@ const PHONE_REPLACEMENT_LIMIT_MAX = 100;
 const DEFAULT_PHONE_VERIFICATION_REPLACEMENT_LIMIT = 3;
 const WHATSAPP_PHONE_VERIFICATION_RESTART_LIMIT_MIN = 1;
 const WHATSAPP_PHONE_VERIFICATION_RESTART_LIMIT_MAX = 20;
-const DEFAULT_WHATSAPP_PHONE_VERIFICATION_RESTART_MAX_ATTEMPTS = 3;
+const DEFAULT_WHATSAPP_PHONE_VERIFICATION_RESTART_MAX_ATTEMPTS = 5;
 const PHONE_CODE_WAIT_SECONDS_MIN = 15;
 const PHONE_CODE_WAIT_SECONDS_MAX = 300;
 const DEFAULT_PHONE_CODE_WAIT_SECONDS = 120;
@@ -1154,6 +1188,10 @@ function getStepIdByNodeIdForCurrentMode(nodeId = '') {
 
 function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
   currentPlusModeEnabled = Boolean(plusModeEnabled);
+  const currentPpBoomEnabled = Boolean(
+    options?.ppBoomEnabled
+    ?? (typeof inputPpboomEnabled !== 'undefined' && inputPpboomEnabled ? inputPpboomEnabled.checked : latestState?.ppBoomEnabled)
+  );
   const defaultMethod = typeof DEFAULT_PLUS_PAYMENT_METHOD !== 'undefined' ? DEFAULT_PLUS_PAYMENT_METHOD : 'paypal';
   const rawPaymentMethod = typeof options === 'string'
     ? options
@@ -1189,6 +1227,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
     plusAccountAccessStrategy: currentPlusAccountAccessStrategy,
     signupMethod: currentSignupMethod,
     phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
+    ppBoomEnabled: currentPpBoomEnabled,
   });
   const nextWorkflowNodes = typeof getWorkflowNodesForMode === 'function'
     ? getWorkflowNodesForMode(currentPlusModeEnabled, {
@@ -1198,6 +1237,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
       plusAccountAccessStrategy: currentPlusAccountAccessStrategy,
       signupMethod: currentSignupMethod,
       phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
+      ppBoomEnabled: currentPpBoomEnabled,
     })
     : stepDefinitions.map((step) => ({
       legacyStepId: Number(step.id),
@@ -1953,7 +1993,7 @@ function showToast(message, type = 'error', duration = 4000) {
 }
 
 function isLocalHelperStartupErrorMessage(message = '') {
-  return /请检查本地\s*hotmail-helper\s*是否启动|start-hotmail-helper\.bat/i.test(String(message || ''));
+  return /请检查本地\s*(?:hotmail-helper|ppboom)\s*是否启动|start-(?:hotmail-helper|ppboom)\.(?:bat|command)/i.test(String(message || ''));
 }
 
 function showLocalHelperStartupAlert(message = '') {
@@ -1966,7 +2006,7 @@ function showLocalHelperStartupAlert(message = '') {
     title: '本地 helper 未连接',
     message: String(message || '本地 CPA JSON 导出无法连接本地 helper。'),
     alert: {
-      text: '请检查本地 hotmail-helper 是否启动。',
+      text: '请检查本地 hotmail-helper / PPBoom 是否启动。',
       tone: 'danger',
     },
     confirmLabel: '我知道了',
@@ -2781,6 +2821,126 @@ function buildDefaultPlusCheckoutProfile() {
   };
 }
 
+function buildDefaultPpboomSettings() {
+  return {
+    ppBoomEnabled: true,
+    ppBoomBrowserBackend: 'local',
+    ppBoomAdsPowerApiBase: 'http://127.0.0.1:50325',
+    ppBoomAdsPowerApiKey: '',
+    ppBoomAdsPowerProfileId: '',
+    ppBoomRoxyBrowserApiBase: 'http://127.0.0.1:50000',
+    ppBoomRoxyBrowserApiKey: '',
+    ppBoomRoxyBrowserProfileId: '',
+    ppBoomStripePublishableKey: '',
+    ppBoomDeviceId: '',
+    ppBoomUserAgent: '',
+    ppBoomMaxAttempts: PPBOOM_DEFAULT_MAX_ATTEMPTS,
+    ppBoomPaymentLocale: 'en',
+    ppBoomCheckoutRebuildMaxAttempts: 3,
+    ppBoomDefaultProxy: '',
+    ppBoomProviderProxy: '',
+  };
+}
+
+function normalizePpboomMaxAttemptsValue(value, fallback = PPBOOM_DEFAULT_MAX_ATTEMPTS) {
+  const numeric = Number.parseInt(String(value ?? '').trim(), 10);
+  if (!Number.isFinite(numeric)) {
+    return Math.max(1, Math.min(PPBOOM_MAX_ATTEMPTS_LIMIT, Number(fallback) || PPBOOM_DEFAULT_MAX_ATTEMPTS));
+  }
+  return Math.max(1, Math.min(PPBOOM_MAX_ATTEMPTS_LIMIT, numeric));
+}
+
+function normalizePpboomPaymentLocaleValue(value = '') {
+  const normalized = String(value || '').trim();
+  return PPBOOM_ALLOWED_PAYMENT_LOCALES.has(normalized) ? normalized : 'en';
+}
+
+function normalizePpboomBrowserBackendValue(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'adspower') return 'adspower';
+  if (normalized === 'roxybrowser') return 'roxybrowser';
+  return 'local';
+}
+
+function setPpboomInputValue(input, value = '') {
+  if (!input) {
+    return;
+  }
+  if (typeof document !== 'undefined' && document.activeElement === input) {
+    return;
+  }
+  const nextValue = String(value ?? '');
+  if (input.value !== nextValue) {
+    input.value = nextValue;
+  }
+}
+
+function normalizePpboomAdsPowerApiBaseValue(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  return /:\/\//.test(raw) ? raw.replace(/\/+$/, '') : `http://${raw.replace(/\/+$/, '')}`;
+}
+
+function normalizePpboomRoxyBrowserApiBaseValue(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  return /:\/\//.test(raw) ? raw.replace(/\/+$/, '') : `http://${raw.replace(/\/+$/, '')}`;
+}
+
+function normalizePpboomCheckoutRebuildMaxAttemptsValue(value, fallback = 3) {
+  const numeric = Number.parseInt(String(value ?? '').trim(), 10);
+  if (!Number.isFinite(numeric)) {
+    return Math.max(1, Math.min(10, Number(fallback) || 3));
+  }
+  return Math.max(1, Math.min(10, numeric));
+}
+
+function normalizePpboomSettingsValue(state = {}) {
+  const defaults = buildDefaultPpboomSettings();
+  const legacyProxy = String(state?.ppBoomProxy || '').trim();
+  const hasRoxyBrowserProfileId = Object.prototype.hasOwnProperty.call(
+    state && typeof state === 'object' ? state : {},
+    'ppBoomRoxyBrowserProfileId',
+  );
+  const legacyProfileId = String(state?.ppBoomAdsPowerProfileId || '').trim();
+  const roxyBrowserProfileId = hasRoxyBrowserProfileId
+    ? String(state?.ppBoomRoxyBrowserProfileId || '').trim()
+    : (normalizePpboomBrowserBackendValue(state?.ppBoomBrowserBackend) === 'roxybrowser' ? legacyProfileId : '');
+  const hasAdsPowerApiBase = Object.prototype.hasOwnProperty.call(
+    state && typeof state === 'object' ? state : {},
+    'ppBoomAdsPowerApiBase',
+  );
+  const hasRoxyBrowserApiBase = Object.prototype.hasOwnProperty.call(
+    state && typeof state === 'object' ? state : {},
+    'ppBoomRoxyBrowserApiBase',
+  );
+  return {
+    ppBoomEnabled: Boolean(state?.ppBoomEnabled),
+    ppBoomBrowserBackend: normalizePpboomBrowserBackendValue(state?.ppBoomBrowserBackend || defaults.ppBoomBrowserBackend),
+    ppBoomAdsPowerApiBase: normalizePpboomAdsPowerApiBaseValue(hasAdsPowerApiBase ? state?.ppBoomAdsPowerApiBase : defaults.ppBoomAdsPowerApiBase),
+    ppBoomAdsPowerApiKey: String(state?.ppBoomAdsPowerApiKey || defaults.ppBoomAdsPowerApiKey || '').trim(),
+    ppBoomAdsPowerProfileId: legacyProfileId,
+    ppBoomRoxyBrowserApiBase: normalizePpboomRoxyBrowserApiBaseValue(hasRoxyBrowserApiBase ? state?.ppBoomRoxyBrowserApiBase : defaults.ppBoomRoxyBrowserApiBase),
+    ppBoomRoxyBrowserApiKey: String(state?.ppBoomRoxyBrowserApiKey || defaults.ppBoomRoxyBrowserApiKey || '').trim(),
+    ppBoomRoxyBrowserProfileId: roxyBrowserProfileId,
+    ppBoomStripePublishableKey: String(state?.ppBoomStripePublishableKey || '').trim(),
+    ppBoomDeviceId: String(state?.ppBoomDeviceId || '').trim(),
+    ppBoomUserAgent: String(state?.ppBoomUserAgent || '').trim(),
+    ppBoomMaxAttempts: normalizePpboomMaxAttemptsValue(state?.ppBoomMaxAttempts, defaults.ppBoomMaxAttempts),
+    ppBoomPaymentLocale: normalizePpboomPaymentLocaleValue(state?.ppBoomPaymentLocale || defaults.ppBoomPaymentLocale),
+    ppBoomCheckoutRebuildMaxAttempts: normalizePpboomCheckoutRebuildMaxAttemptsValue(
+      state?.ppBoomCheckoutRebuildMaxAttempts,
+      defaults.ppBoomCheckoutRebuildMaxAttempts,
+    ),
+    ppBoomDefaultProxy: String(state?.ppBoomDefaultProxy || legacyProxy).trim(),
+    ppBoomProviderProxy: String(state?.ppBoomProviderProxy || '').trim(),
+  };
+}
+
 function normalizePlusCheckoutProfileValue(profile = {}, fallback = null) {
   const rawProfile = profile && typeof profile === 'object' && !Array.isArray(profile)
     ? profile
@@ -3092,6 +3252,182 @@ function applyPlusCheckoutProfileToInputs(state = latestState, options = {}) {
   }
   updatePlusCheckoutConversionModeUi();
   validateHostedCheckoutContactConfig();
+}
+
+function updatePpboomUi(state = latestState) {
+  const normalized = normalizePpboomSettingsValue(state || {});
+  const runtimeStatus = String(state?.ppBoomJobStatus || '').trim().toLowerCase();
+  const currentAttempt = Math.max(0, Number(state?.ppBoomCurrentAttempt) || 0);
+  const enabled = Boolean(normalized.ppBoomEnabled);
+  if (ppboomSection) {
+    ppboomSection.style.display = '';
+  }
+  if (inputPpboomEnabled) {
+    inputPpboomEnabled.checked = enabled;
+  }
+  if (ppboomSettingsShell) {
+    ppboomSettingsShell.hidden = !enabled;
+  }
+  const browserBackend = normalized.ppBoomBrowserBackend;
+  if (selectPpboomBrowserBackend) {
+    selectPpboomBrowserBackend.value = browserBackend;
+  }
+  if (rowPpboomAdsPowerApiBase) {
+    rowPpboomAdsPowerApiBase.style.display = '';
+  }
+  setPpboomInputValue(inputPpboomAdsPowerApiBase, normalized.ppBoomAdsPowerApiBase);
+  if (rowPpboomAdsPowerApiKey) {
+    rowPpboomAdsPowerApiKey.style.display = '';
+  }
+  setPpboomInputValue(inputPpboomAdsPowerApiKey, normalized.ppBoomAdsPowerApiKey);
+  if (rowPpboomRoxyBrowserApiBase) {
+    rowPpboomRoxyBrowserApiBase.style.display = '';
+  }
+  setPpboomInputValue(inputPpboomRoxyBrowserApiBase, normalized.ppBoomRoxyBrowserApiBase);
+  if (rowPpboomRoxyBrowserApiKey) {
+    rowPpboomRoxyBrowserApiKey.style.display = '';
+  }
+  setPpboomInputValue(inputPpboomRoxyBrowserApiKey, normalized.ppBoomRoxyBrowserApiKey);
+  if (rowPpboomAdsPowerProfileId) {
+    rowPpboomAdsPowerProfileId.style.display = '';
+  }
+  setPpboomInputValue(inputPpboomAdsPowerProfileId, normalized.ppBoomAdsPowerProfileId);
+  if (rowPpboomRoxyBrowserProfileId) {
+    rowPpboomRoxyBrowserProfileId.style.display = '';
+  }
+  setPpboomInputValue(inputPpboomRoxyBrowserProfileId, normalized.ppBoomRoxyBrowserProfileId);
+  if (inputPpboomStripePublishableKey) {
+    inputPpboomStripePublishableKey.value = normalized.ppBoomStripePublishableKey;
+  }
+  if (inputPpboomDeviceId) {
+    inputPpboomDeviceId.value = normalized.ppBoomDeviceId;
+  }
+  if (inputPpboomUserAgent) {
+    inputPpboomUserAgent.value = normalized.ppBoomUserAgent;
+  }
+  if (inputPpboomMaxAttempts) {
+    inputPpboomMaxAttempts.value = String(normalized.ppBoomMaxAttempts);
+  }
+  if (selectPpboomPaymentLocale) {
+    selectPpboomPaymentLocale.value = normalized.ppBoomPaymentLocale;
+  }
+  if (inputPpboomCheckoutRebuildMaxAttempts) {
+    inputPpboomCheckoutRebuildMaxAttempts.value = String(normalized.ppBoomCheckoutRebuildMaxAttempts);
+  }
+  if (inputPpboomDefaultProxy) {
+    inputPpboomDefaultProxy.value = normalized.ppBoomDefaultProxy;
+  }
+  if (inputPpboomProviderProxy) {
+    inputPpboomProviderProxy.value = normalized.ppBoomProviderProxy;
+  }
+  if (rowPpboomProviderProxy) {
+    rowPpboomProviderProxy.hidden = false;
+  }
+  if (displayPpboomStatus) {
+    displayPpboomStatus.textContent = enabled ? '已启用' : '默认关闭';
+  }
+  if (displayPpboomRuntime) {
+    if (runtimeStatus === 'pending') {
+      displayPpboomRuntime.textContent = `准备中：第 ${currentAttempt} / ${normalized.ppBoomMaxAttempts} 次`;
+    } else if (runtimeStatus === 'running') {
+      displayPpboomRuntime.textContent = `运行中：第 ${currentAttempt} / ${normalized.ppBoomMaxAttempts} 次`;
+    } else if (runtimeStatus === 'paused') {
+      displayPpboomRuntime.textContent = `已暂停：第 ${currentAttempt} / ${normalized.ppBoomMaxAttempts} 次`;
+    } else if (runtimeStatus === 'succeeded') {
+      displayPpboomRuntime.textContent = `已成功：第 ${currentAttempt} 次`;
+    } else if (runtimeStatus === 'failed') {
+      displayPpboomRuntime.textContent = `已失败：共 ${currentAttempt} 次`;
+    } else {
+      displayPpboomRuntime.textContent = '未运行';
+    }
+  }
+  if (btnPpboomPause) {
+    btnPpboomPause.disabled = !(enabled && (runtimeStatus === 'running' || runtimeStatus === 'pending'));
+  }
+  if (btnPpboomResume) {
+    btnPpboomResume.disabled = !(enabled && runtimeStatus === 'paused');
+  }
+}
+
+function buildPpboomSettingsPayloadFromInputs() {
+  const browserBackend = normalizePpboomBrowserBackendValue(selectPpboomBrowserBackend?.value || 'local');
+  return {
+    ppBoomEnabled: Boolean(inputPpboomEnabled?.checked),
+    ppBoomBrowserBackend: browserBackend,
+    ppBoomAdsPowerApiBase: normalizePpboomAdsPowerApiBaseValue(inputPpboomAdsPowerApiBase?.value || ''),
+    ppBoomAdsPowerApiKey: String(inputPpboomAdsPowerApiKey?.value || '').trim(),
+    ppBoomAdsPowerProfileId: String(inputPpboomAdsPowerProfileId?.value || '').trim(),
+    ppBoomRoxyBrowserApiBase: normalizePpboomRoxyBrowserApiBaseValue(inputPpboomRoxyBrowserApiBase?.value || ''),
+    ppBoomRoxyBrowserApiKey: String(inputPpboomRoxyBrowserApiKey?.value || '').trim(),
+    ppBoomRoxyBrowserProfileId: String(inputPpboomRoxyBrowserProfileId?.value || '').trim(),
+    ppBoomStripePublishableKey: String(inputPpboomStripePublishableKey?.value || '').trim(),
+    ppBoomDeviceId: String(inputPpboomDeviceId?.value || '').trim(),
+    ppBoomUserAgent: String(inputPpboomUserAgent?.value || '').trim(),
+    ppBoomMaxAttempts: normalizePpboomMaxAttemptsValue(inputPpboomMaxAttempts?.value, PPBOOM_DEFAULT_MAX_ATTEMPTS),
+    ppBoomPaymentLocale: normalizePpboomPaymentLocaleValue(selectPpboomPaymentLocale?.value || 'en'),
+    ppBoomCheckoutRebuildMaxAttempts: normalizePpboomCheckoutRebuildMaxAttemptsValue(
+      inputPpboomCheckoutRebuildMaxAttempts?.value,
+      3,
+    ),
+    ppBoomDefaultProxy: String(inputPpboomDefaultProxy?.value || '').trim(),
+    ppBoomProviderProxy: String(inputPpboomProviderProxy?.value || '').trim(),
+  };
+}
+
+function resetPpboomInputsToDefaults() {
+  const defaults = buildDefaultPpboomSettings();
+  if (inputPpboomEnabled) {
+    inputPpboomEnabled.checked = defaults.ppBoomEnabled;
+  }
+  if (selectPpboomBrowserBackend) {
+    selectPpboomBrowserBackend.value = defaults.ppBoomBrowserBackend;
+  }
+  if (inputPpboomAdsPowerApiBase) {
+    inputPpboomAdsPowerApiBase.value = defaults.ppBoomAdsPowerApiBase;
+  }
+  if (inputPpboomAdsPowerApiKey) {
+    inputPpboomAdsPowerApiKey.value = defaults.ppBoomAdsPowerApiKey;
+  }
+  if (inputPpboomAdsPowerProfileId) {
+    inputPpboomAdsPowerProfileId.value = defaults.ppBoomAdsPowerProfileId;
+  }
+  if (inputPpboomRoxyBrowserProfileId) {
+    inputPpboomRoxyBrowserProfileId.value = defaults.ppBoomRoxyBrowserProfileId;
+  }
+  if (inputPpboomRoxyBrowserApiBase) {
+    inputPpboomRoxyBrowserApiBase.value = defaults.ppBoomRoxyBrowserApiBase;
+  }
+  if (inputPpboomRoxyBrowserApiKey) {
+    inputPpboomRoxyBrowserApiKey.value = defaults.ppBoomRoxyBrowserApiKey;
+  }
+  if (inputPpboomStripePublishableKey) {
+    inputPpboomStripePublishableKey.value = defaults.ppBoomStripePublishableKey;
+  }
+  if (inputPpboomDeviceId) {
+    inputPpboomDeviceId.value = defaults.ppBoomDeviceId;
+  }
+  if (inputPpboomUserAgent) {
+    inputPpboomUserAgent.value = defaults.ppBoomUserAgent;
+  }
+  if (inputPpboomMaxAttempts) {
+    inputPpboomMaxAttempts.value = String(defaults.ppBoomMaxAttempts);
+  }
+  if (selectPpboomPaymentLocale) {
+    selectPpboomPaymentLocale.value = defaults.ppBoomPaymentLocale;
+  }
+  if (inputPpboomCheckoutRebuildMaxAttempts) {
+    inputPpboomCheckoutRebuildMaxAttempts.value = String(defaults.ppBoomCheckoutRebuildMaxAttempts);
+  }
+  if (inputPpboomDefaultProxy) {
+    inputPpboomDefaultProxy.value = defaults.ppBoomDefaultProxy;
+  }
+  if (inputPpboomProviderProxy) {
+    inputPpboomProviderProxy.value = defaults.ppBoomProviderProxy;
+  }
+  updatePpboomUi({
+    ...latestState,
+    ...defaults,
+  });
 }
 
 function normalizeGpcHelperPhoneModeValue(value = '') {
@@ -5418,6 +5754,7 @@ function collectSettingsPayload() {
     plusCheckoutConversionProxyUrl: typeof inputPlusCheckoutConversionProxy !== 'undefined' && inputPlusCheckoutConversionProxy
       ? normalizePlusCheckoutConversionProxyUrlValue(inputPlusCheckoutConversionProxy.value)
       : '',
+    ...buildPpboomSettingsPayloadFromInputs(),
     ...buildPlusCheckoutLegacyPatchFromProfile(activePlusCheckoutProfile),
     chatGptApiSmsPoolText: typeof inputChatGptApiSmsPool !== 'undefined' && inputChatGptApiSmsPool
       ? normalizeHostedCheckoutSmsPoolTextValue(inputChatGptApiSmsPool.value)
@@ -11980,6 +12317,10 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     || (typeof latestState !== 'undefined' ? latestState?.activeFlowId : '')
     || defaultFlowId
   ).trim().toLowerCase() || defaultFlowId;
+  const nextPpBoomEnabled = Boolean(
+    options.ppBoomEnabled
+    ?? (typeof inputPpboomEnabled !== 'undefined' && inputPpboomEnabled ? inputPpboomEnabled.checked : latestState?.ppBoomEnabled)
+  );
   const rootScope = typeof window !== 'undefined' ? window : globalThis;
   const currentPaymentStep = stepDefinitions.find((step) => step.key === 'paypal-approve');
   const nextPaymentTitle = rootScope.MultiPageStepDefinitions?.getPlusPaymentStepTitle?.({
@@ -12009,6 +12350,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     plusAccountAccessStrategy: nextAccountAccessStrategy,
     signupMethod: nextSignupMethod,
     phoneSignupReloginAfterBindEmailEnabled: nextPhoneSignupReloginAfterBindEmailEnabled,
+    ppBoomEnabled: nextPpBoomEnabled,
   });
   renderStepsList();
 }
@@ -12416,6 +12758,7 @@ function applySettingsState(state) {
   setHotmailServiceMode(state?.hotmailServiceMode);
   inputHotmailRemoteBaseUrl.value = state?.hotmailRemoteBaseUrl || '';
   inputHotmailLocalBaseUrl.value = state?.hotmailLocalBaseUrl || '';
+  updatePpboomUi(state);
   if (typeof inputHotmailAliasEnabled !== 'undefined' && inputHotmailAliasEnabled) {
     inputHotmailAliasEnabled.checked = normalizeHotmailAliasEnabledValue(state?.hotmailAliasEnabled);
   }
@@ -18554,6 +18897,118 @@ async function handleHostedCheckoutManualFetch() {
   }
 }
 
+async function handleSavePpboomSettings() {
+  const payload = buildPpboomSettingsPayloadFromInputs();
+  const activeWindowId = payload.ppBoomBrowserBackend === 'roxybrowser'
+    ? payload.ppBoomRoxyBrowserProfileId
+    : payload.ppBoomAdsPowerProfileId;
+  if (payload.ppBoomBrowserBackend === 'adspower' && !activeWindowId) {
+    throw new Error('AdsPower窗口ID 为必填项。');
+  }
+  if (payload.ppBoomBrowserBackend === 'roxybrowser' && !activeWindowId) {
+    throw new Error('RoxyBrowser窗口ID 为必填项。');
+  }
+  if (payload.ppBoomBrowserBackend === 'roxybrowser' && /^\d+$/.test(activeWindowId || '')) {
+    throw new Error('RoxyBrowser窗口ID 不是 workspaceId。请在 RoxyBrowser-全部窗口-右键窗口-窗口操作-复制窗口ID。');
+  }
+  if (payload.ppBoomBrowserBackend === 'roxybrowser' && !payload.ppBoomRoxyBrowserApiKey) {
+    throw new Error('RoxyBrowser API Key 为必填项。');
+  }
+  if (selectPpboomBrowserBackend) {
+    selectPpboomBrowserBackend.value = payload.ppBoomBrowserBackend;
+  }
+  if (inputPpboomAdsPowerApiBase) {
+    inputPpboomAdsPowerApiBase.value = payload.ppBoomAdsPowerApiBase;
+  }
+  if (inputPpboomAdsPowerApiKey) {
+    inputPpboomAdsPowerApiKey.value = payload.ppBoomAdsPowerApiKey;
+  }
+  if (inputPpboomAdsPowerProfileId) {
+    inputPpboomAdsPowerProfileId.value = payload.ppBoomAdsPowerProfileId;
+  }
+  if (inputPpboomRoxyBrowserProfileId) {
+    inputPpboomRoxyBrowserProfileId.value = payload.ppBoomRoxyBrowserProfileId;
+  }
+  if (inputPpboomRoxyBrowserApiBase) {
+    inputPpboomRoxyBrowserApiBase.value = payload.ppBoomRoxyBrowserApiBase;
+  }
+  if (inputPpboomRoxyBrowserApiKey) {
+    inputPpboomRoxyBrowserApiKey.value = payload.ppBoomRoxyBrowserApiKey;
+  }
+  if (inputPpboomMaxAttempts) {
+    inputPpboomMaxAttempts.value = String(payload.ppBoomMaxAttempts);
+  }
+  if (selectPpboomPaymentLocale) {
+    selectPpboomPaymentLocale.value = payload.ppBoomPaymentLocale;
+  }
+  if (inputPpboomCheckoutRebuildMaxAttempts) {
+    inputPpboomCheckoutRebuildMaxAttempts.value = String(payload.ppBoomCheckoutRebuildMaxAttempts);
+  }
+  if (inputPpboomDefaultProxy) {
+    inputPpboomDefaultProxy.value = payload.ppBoomDefaultProxy;
+  }
+  if (inputPpboomProviderProxy) {
+    inputPpboomProviderProxy.value = payload.ppBoomProviderProxy;
+  }
+  const response = await sendRuntimeMessageWithTimeout({
+    type: 'SAVE_SETTING',
+    source: 'sidepanel',
+    payload,
+  }, 20000, '保存 PPBoom 配置');
+  if (response?.error) {
+    throw new Error(response.error);
+  }
+  syncLatestState({
+    ...(latestState || {}),
+    ...payload,
+    ...(response?.state && typeof response.state === 'object' ? response.state : {}),
+  });
+  updatePpboomUi(latestState);
+  markSettingsDirty(false);
+  showToast('PPBoom 配置已保存。', 'success', 1800);
+}
+
+async function handleClearPpboomSettings() {
+  const defaults = buildDefaultPpboomSettings();
+  resetPpboomInputsToDefaults();
+  const response = await sendRuntimeMessageWithTimeout({
+    type: 'SAVE_SETTING',
+    source: 'sidepanel',
+    payload: defaults,
+  }, 20000, '清除 PPBoom 配置');
+  if (response?.error) {
+    throw new Error(response.error);
+  }
+  syncLatestState({
+    ...(latestState || {}),
+    ...defaults,
+    ...(response?.state && typeof response.state === 'object' ? response.state : {}),
+  });
+  updatePpboomUi(latestState);
+  markSettingsDirty(false);
+  showToast('PPBoom 配置已重置。', 'success', 1800);
+}
+
+async function controlPpboomJob(action = 'pause') {
+  const type = action === 'resume' ? 'PPBOOM_RESUME_JOB' : 'PPBOOM_PAUSE_JOB';
+  const response = await sendRuntimeMessageWithTimeout({
+    type,
+    source: 'sidepanel',
+    payload: {},
+  }, 20000, action === 'resume' ? '继续 PPBoom 任务' : '暂停 PPBoom 任务');
+  if (response?.error) {
+    throw new Error(response.error);
+  }
+  if (response?.state && typeof response.state === 'object') {
+    syncLatestState({
+      ...(latestState || {}),
+      ...response.state,
+    });
+    updatePpboomUi(latestState);
+  }
+  showToast(action === 'resume' ? 'PPBoom 已继续。' : 'PPBoom 已请求暂停。', 'info', 1800);
+}
+
 function handlePlusCheckoutModeSelectionChange(nextMode) {
   const previousMode = getActivePlusCheckoutModeFromState(latestState);
   const previousProfileDraft = buildPlusCheckoutProfileFromInputs();
@@ -18613,6 +19068,116 @@ inputPlusCheckoutConversionProxy?.addEventListener('blur', () => {
 btnPlusCheckoutConversionProxyTest?.addEventListener('click', () => {
   handlePlusCheckoutConversionProxyTest().catch((error) => {
     showToast(error?.message || String(error || '支付转换代理测试失败'), 'error');
+  });
+});
+
+inputPpboomEnabled?.addEventListener('change', () => {
+  const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
+    ? resolveStepDefinitionCapabilityState({
+      ...latestState,
+      ...buildPpboomSettingsPayloadFromInputs(),
+    }, {
+      signupMethod: latestState?.signupMethod,
+    })
+    : {
+      plusModeEnabled: Boolean(latestState?.plusModeEnabled),
+      signupMethod: normalizeSignupMethod(latestState?.signupMethod || DEFAULT_SIGNUP_METHOD),
+      plusAccountAccessStrategy: latestState?.plusAccountAccessStrategy,
+    };
+  syncStepDefinitionsForMode(stepDefinitionState.plusModeEnabled, {
+    plusPaymentMethod: getSelectedPlusPaymentMethod(latestState),
+    signupMethod: stepDefinitionState.signupMethod,
+    plusAccountAccessStrategy: stepDefinitionState.plusAccountAccessStrategy,
+    ppBoomEnabled: Boolean(inputPpboomEnabled.checked),
+    render: true,
+  });
+  updatePpboomUi({
+    ...latestState,
+    ...buildPpboomSettingsPayloadFromInputs(),
+  });
+  markSettingsDirty(true);
+});
+selectPpboomBrowserBackend?.addEventListener('change', () => {
+  updatePpboomUi({
+    ...latestState,
+    ...buildPpboomSettingsPayloadFromInputs(),
+  });
+  markSettingsDirty(true);
+});
+inputPpboomAdsPowerApiBase?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomAdsPowerApiBase?.addEventListener('blur', () => {
+  inputPpboomAdsPowerApiBase.value = normalizePpboomAdsPowerApiBaseValue(inputPpboomAdsPowerApiBase.value);
+});
+inputPpboomAdsPowerApiKey?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomAdsPowerProfileId?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomRoxyBrowserProfileId?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomRoxyBrowserApiBase?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomRoxyBrowserApiBase?.addEventListener('blur', () => {
+  inputPpboomRoxyBrowserApiBase.value = normalizePpboomRoxyBrowserApiBaseValue(inputPpboomRoxyBrowserApiBase.value);
+});
+inputPpboomRoxyBrowserApiKey?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomStripePublishableKey?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomDeviceId?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomUserAgent?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomMaxAttempts?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomMaxAttempts?.addEventListener('blur', () => {
+  inputPpboomMaxAttempts.value = String(normalizePpboomMaxAttemptsValue(inputPpboomMaxAttempts.value));
+});
+selectPpboomPaymentLocale?.addEventListener('change', () => {
+  markSettingsDirty(true);
+});
+inputPpboomCheckoutRebuildMaxAttempts?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomCheckoutRebuildMaxAttempts?.addEventListener('blur', () => {
+  inputPpboomCheckoutRebuildMaxAttempts.value = String(
+    normalizePpboomCheckoutRebuildMaxAttemptsValue(inputPpboomCheckoutRebuildMaxAttempts.value, 3)
+  );
+});
+inputPpboomDefaultProxy?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+inputPpboomProviderProxy?.addEventListener('input', () => {
+  markSettingsDirty(true);
+});
+btnSavePpboomSettings?.addEventListener('click', () => {
+  handleSavePpboomSettings().catch((error) => {
+    showToast(error?.message || String(error || '保存 PPBoom 配置失败'), 'error');
+  });
+});
+btnClearPpboomSettings?.addEventListener('click', () => {
+  handleClearPpboomSettings().catch((error) => {
+    showToast(error?.message || String(error || '清除 PPBoom 配置失败'), 'error');
+  });
+});
+btnPpboomPause?.addEventListener('click', () => {
+  controlPpboomJob('pause').catch((error) => {
+    showToast(error?.message || String(error || '暂停 PPBoom 失败'), 'error');
+  });
+});
+btnPpboomResume?.addEventListener('click', () => {
+  controlPpboomJob('resume').catch((error) => {
+    showToast(error?.message || String(error || '继续 PPBoom 失败'), 'error');
   });
 });
 
@@ -19329,6 +19894,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         localhostUrl: null,
         email: null,
         password: null,
+        ppBoomJobId: '',
+        ppBoomJobStatus: '',
+        ppBoomCurrentAttempt: 0,
+        ppBoomPauseRequested: false,
+        ppBoomLastLogIndex: 0,
         nodeStatuses: NODE_DEFAULT_STATUSES,
         logs: [],
         scheduledAutoRunAt: null,
@@ -19378,6 +19948,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       renderPayPalAccounts();
       renderHotmailAccounts();
       renderMail2925Accounts();
+      updatePpboomUi(latestState);
       if (isLuckmailProvider()) {
         queueLuckmailPurchaseRefresh();
       }
@@ -19774,6 +20345,30 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         );
         updatePlusModeUI();
         updateSignupMethodUI({ notify: true });
+      }
+      if (
+        message.payload.ppBoomEnabled !== undefined
+        || message.payload.ppBoomBrowserBackend !== undefined
+        || message.payload.ppBoomAdsPowerApiBase !== undefined
+        || message.payload.ppBoomAdsPowerApiKey !== undefined
+        || message.payload.ppBoomAdsPowerProfileId !== undefined
+        || message.payload.ppBoomRoxyBrowserApiBase !== undefined
+        || message.payload.ppBoomRoxyBrowserApiKey !== undefined
+        || message.payload.ppBoomRoxyBrowserProfileId !== undefined
+        || message.payload.ppBoomStripePublishableKey !== undefined
+        || message.payload.ppBoomDeviceId !== undefined
+        || message.payload.ppBoomUserAgent !== undefined
+        || message.payload.ppBoomMaxAttempts !== undefined
+        || message.payload.ppBoomPaymentLocale !== undefined
+        || message.payload.ppBoomCheckoutRebuildMaxAttempts !== undefined
+        || message.payload.ppBoomProxy !== undefined
+        || message.payload.ppBoomDefaultProxy !== undefined
+        || message.payload.ppBoomProviderProxy !== undefined
+        || message.payload.ppBoomJobStatus !== undefined
+        || message.payload.ppBoomCurrentAttempt !== undefined
+        || message.payload.ppBoomPauseRequested !== undefined
+      ) {
+        updatePpboomUi(latestState);
       }
       if (
         message.payload.plusManualConfirmationPending !== undefined

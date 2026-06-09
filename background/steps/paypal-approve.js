@@ -137,7 +137,8 @@
     }
 
     function isPayPalUrl(url = '') {
-      return /paypal\./i.test(String(url || ''));
+      return /paypal\./i.test(String(url || ''))
+        || /pm-redirects\.stripe\.com/i.test(String(url || ''));
     }
 
     function isPayPalPasswordState(pageState = {}) {
@@ -241,6 +242,22 @@
         if (Date.now() - startedAt >= PAYPAL_APPROVE_WAIT_TIMEOUT_MS) {
           throw new Error(`步骤 8：PayPal 授权页停留超过 ${Math.round(PAYPAL_APPROVE_WAIT_TIMEOUT_MS / 1000)} 秒，未进入可处理的下一步状态，已停止等待。`);
         }
+        {
+          const rawUrl = (await chrome.tabs.get(tabId).catch(() => null))?.url || '';
+          if (/pm-redirects\.stripe\.com/i.test(rawUrl)) {
+            await addLog('步骤 8：当前在 Stripe 重定向页，等待跳转到 PayPal...', 'info');
+            const redirected = await waitForTabUrlMatchUntilStopped(
+              tabId,
+              (url) => /paypal\./i.test(url),
+            );
+            if (!redirected) {
+              throw new Error('步骤 8：等待 Stripe 重定向到 PayPal 超时。');
+            }
+            await waitForTabCompleteUntilStopped(tabId);
+            await sleepWithStop(1000);
+            continue;
+          }
+        }
         const currentUrl = (await chrome.tabs.get(tabId).catch(() => null))?.url || '';
         if (currentUrl && !isPayPalUrl(currentUrl)) {
           await addLog('步骤 8：PayPal 已跳转离开授权页，准备进入回跳确认。', 'ok');
@@ -249,6 +266,28 @@
 
         await ensurePayPalReady(tabId, '步骤 8：PayPal 页面正在切换，等待脚本重新就绪...');
         const pageState = await getPayPalState(tabId);
+
+        if (pageState.approveReady) {
+          await addLog('步骤 8：正在点击 PayPal“同意并继续”...', 'info');
+          const clicked = await clickApprove(tabId);
+          if (clicked) {
+            await setState({ plusPaypalApprovedAt: Date.now() });
+            break;
+          }
+        }
+
+        if (pageState.hasPasskeyPrompt) {
+          await addLog('步骤 8：检测到 PayPal 通行密钥提示，正在关闭...', 'info');
+          await dismissPrompts(tabId);
+          await sleepWithStop(1000);
+          continue;
+        }
+
+        const dismissed = await dismissPrompts(tabId).catch(() => ({ clicked: 0 }));
+        if (dismissed.clicked) {
+          await sleepWithStop(1000);
+          continue;
+        }
 
         if (pageState.needsLogin) {
           const submitResult = await submitLogin(tabId, state);
@@ -268,28 +307,6 @@
           }
           loggedWaiting = false;
           continue;
-        }
-
-        if (pageState.hasPasskeyPrompt) {
-          await addLog('步骤 8：检测到 PayPal 通行密钥提示，正在关闭...', 'info');
-          await dismissPrompts(tabId);
-          await sleepWithStop(1000);
-          continue;
-        }
-
-        const dismissed = await dismissPrompts(tabId).catch(() => ({ clicked: 0 }));
-        if (dismissed.clicked) {
-          await sleepWithStop(1000);
-          continue;
-        }
-
-        if (pageState.approveReady) {
-          await addLog('步骤 8：正在点击 PayPal“同意并继续”...', 'info');
-          const clicked = await clickApprove(tabId);
-          if (clicked) {
-            await setState({ plusPaypalApprovedAt: Date.now() });
-            break;
-          }
         }
 
         if (!loggedWaiting) {

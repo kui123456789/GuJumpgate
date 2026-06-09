@@ -684,7 +684,7 @@ const PHONE_REPLACEMENT_LIMIT_MAX = 100;
 const DEFAULT_PHONE_VERIFICATION_REPLACEMENT_LIMIT = 3;
 const WHATSAPP_PHONE_VERIFICATION_RESTART_LIMIT_MIN = 1;
 const WHATSAPP_PHONE_VERIFICATION_RESTART_LIMIT_MAX = 20;
-const DEFAULT_WHATSAPP_PHONE_VERIFICATION_RESTART_MAX_ATTEMPTS = 3;
+const DEFAULT_WHATSAPP_PHONE_VERIFICATION_RESTART_MAX_ATTEMPTS = 5;
 const PHONE_CODE_WAIT_SECONDS_MIN = 15;
 const PHONE_CODE_WAIT_SECONDS_MAX = 300;
 const DEFAULT_PHONE_CODE_WAIT_SECONDS = 120;
@@ -892,6 +892,7 @@ function getStepDefinitionsForState(state = {}) {
       plusModeEnabled: isPlusModeState(state),
       plusPaymentMethod: normalizePlusPaymentMethod(state?.plusPaymentMethod),
       plusAccountAccessStrategy: normalizePlusAccountAccessStrategyForState(state),
+      ppBoomEnabled: Boolean(state?.ppBoomEnabled),
       signupMethod: getSignupMethodForStepDefinitions(state),
       phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
     });
@@ -1000,6 +1001,7 @@ function getNodeDefinitionsForState(state = {}) {
       ...state,
       activeFlowId: state?.activeFlowId || state?.flowId || DEFAULT_ACTIVE_FLOW_ID,
       flowId: state?.flowId || state?.activeFlowId || DEFAULT_ACTIVE_FLOW_ID,
+      ppBoomEnabled: Boolean(state?.ppBoomEnabled),
     });
   }
   return getStepDefinitionsForState(state)
@@ -1136,6 +1138,23 @@ const PERSISTED_SETTING_DEFAULTS = {
   plusCheckoutCloudConversionApiUrl: BUILTIN_PLUS_CHECKOUT_CLOUD_CONVERSION_API_URL,
   plusCheckoutCloudConversionApiKey: BUILTIN_PLUS_CHECKOUT_CLOUD_CONVERSION_API_KEY,
   plusCheckoutConversionProxyUrl: '',
+  ppBoomEnabled: true,
+  ppBoomBrowserBackend: 'local',
+  ppBoomAdsPowerApiBase: 'http://127.0.0.1:50325',
+  ppBoomAdsPowerApiKey: '',
+  ppBoomAdsPowerProfileId: '',
+  ppBoomRoxyBrowserApiBase: 'http://127.0.0.1:50000',
+  ppBoomRoxyBrowserApiKey: '',
+  ppBoomRoxyBrowserProfileId: '',
+  ppBoomStripePublishableKey: '',
+  ppBoomDeviceId: '',
+  ppBoomUserAgent: '',
+  ppBoomMaxAttempts: 10,
+  ppBoomPaymentLocale: 'en',
+  ppBoomCheckoutRebuildMaxAttempts: 3,
+  ppBoomDefaultProxy: '',
+  ppBoomProviderProxy: '',
+  ppBoomProxy: '',
   hostedCheckoutVerificationPopupDelaySeconds: 20,
   hostedCheckoutVerificationUrl: '',
   hostedCheckoutPhoneNumber: '',
@@ -1534,6 +1553,11 @@ const DEFAULT_STATE = {
   plusCheckoutCountry: 'DE',
   plusCheckoutCurrency: 'EUR',
   plusCheckoutSource: '',
+  ppBoomJobId: '',
+  ppBoomJobStatus: '',
+  ppBoomCurrentAttempt: 0,
+  ppBoomPauseRequested: false,
+  ppBoomLastLogIndex: 0,
   paypalGenericErrorRecoveryCount: 0,
   paypalApprovalBranchRecoveryCount: 0,
   pendingPayPalCookieCleanupBeforeCheckoutCreate: false,
@@ -3863,6 +3887,68 @@ function normalizePersistentSettingValue(key, value) {
         return String(value || '').trim();
       }
     case 'plusCheckoutCloudConversionApiKey':
+      return String(value || '').trim();
+    case 'ppBoomEnabled':
+      return Boolean(value);
+    case 'ppBoomBrowserBackend':
+      {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (normalized === 'adspower') return 'adspower';
+        if (normalized === 'roxybrowser') return 'roxybrowser';
+        return 'local';
+      }
+    case 'ppBoomAdsPowerApiBase': {
+      const raw = String(value || '').trim();
+      if (!raw) {
+        return '';
+      }
+      return /:\/\//.test(raw) ? raw.replace(/\/+$/, '') : `http://${raw.replace(/\/+$/, '')}`;
+    }
+    case 'ppBoomAdsPowerApiKey':
+      return String(value || '').trim();
+    case 'ppBoomAdsPowerProfileId':
+      return String(value || '').trim();
+    case 'ppBoomRoxyBrowserProfileId':
+      return String(value || '').trim();
+    case 'ppBoomRoxyBrowserApiBase': {
+      const raw = String(value || '').trim();
+      if (!raw) {
+        return '';
+      }
+      return /:\/\//.test(raw) ? raw.replace(/\/+$/, '') : `http://${raw.replace(/\/+$/, '')}`;
+    }
+    case 'ppBoomRoxyBrowserApiKey':
+      return String(value || '').trim();
+    case 'ppBoomStripePublishableKey':
+      return String(value || '').trim();
+    case 'ppBoomDeviceId':
+      return String(value || '').trim();
+    case 'ppBoomUserAgent':
+      return String(value || '').trim();
+    case 'ppBoomMaxAttempts': {
+      const numeric = Number.parseInt(String(value ?? '').trim(), 10);
+      if (!Number.isFinite(numeric)) {
+        return 10;
+      }
+      return Math.max(1, Math.min(20, numeric));
+    }
+    case 'ppBoomPaymentLocale': {
+      const normalized = String(value || '').trim();
+      const allowed = new Set(['en', 'zh-CN', 'zh-TW', 'ja', 'ko', 'de', 'fr', 'es', 'id', 'pt-BR']);
+      return allowed.has(normalized) ? normalized : 'en';
+    }
+    case 'ppBoomCheckoutRebuildMaxAttempts': {
+      const numeric = Number.parseInt(String(value ?? '').trim(), 10);
+      if (!Number.isFinite(numeric)) {
+        return 3;
+      }
+      return Math.max(1, Math.min(10, numeric));
+    }
+    case 'ppBoomDefaultProxy':
+      return String(value || '').trim();
+    case 'ppBoomProviderProxy':
+      return String(value || '').trim();
+    case 'ppBoomProxy':
       return String(value || '').trim();
     case 'plusCheckoutConversionProxyUrl': {
       const rawValue = String(value || '').trim();
@@ -11072,7 +11158,7 @@ async function restartSignupPhonePasswordMismatchAttemptFromNode(nodeId, restart
   const emailSuffix = preservedEmail ? `当前邮箱：${preservedEmail}；` : '';
   const phoneSuffix = activeSignupPhoneNumber ? `当前手机号：${activeSignupPhoneNumber}；` : '';
   const errorMessage = getErrorMessage(error);
-  const reasonLabel = /PHONE_RESEND_BANNED_NUMBER::|无法向此(?:电话|手机)号码发送短信|无法发送短信到此(?:电话|手机)号码|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i
+  const reasonLabel = /PHONE_RESEND_BANNED_NUMBER::|无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)|无法发送(?:短信|验证码)到(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i
     .test(errorMessage)
     ? '当前注册手机号无法接收短信'
     : (/与此(?:电话|手机)号码相关联的帐户已存在|account\s+associated\s+with\s+this\s+phone\s+number\s+already\s+exists/i
@@ -15956,10 +16042,15 @@ const goPayApproveExecutor = self.MultiPageBackgroundGoPayApprove?.createGoPayAp
 const plusReturnConfirmExecutor = self.MultiPageBackgroundPlusReturnConfirm?.createPlusReturnConfirmExecutor({
   addLog,
   completeNodeFromBackground,
+  createAutomationTab,
+  ensureContentScriptReadyOnTabUntilStopped,
   getTabId,
   isTabAlive,
+  registerTab,
+  sendTabMessageUntilStopped,
   setState,
   sleepWithStop,
+  waitForTabCompleteUntilStopped,
   waitForTabUrlMatchUntilStopped,
 });
 const sub2ApiSessionImportExecutor = self.MultiPageBackgroundSub2ApiSessionImport?.createSub2ApiSessionImportExecutor({
@@ -16183,12 +16274,14 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   AUTO_RUN_TIMER_KIND_SCHEDULED_START,
   notifyNodeComplete,
   notifyNodeError,
+  pausePpBoomJob: (...args) => plusCheckoutCreateExecutor.pausePpBoomJob(...args),
   patchHotmailAccount,
   patchMail2925Account,
   registerTab,
   requestStop,
   probeIpProxyExit: null,
   resetState,
+  resumePpBoomJob: (...args) => plusCheckoutCreateExecutor.resumePpBoomJob(...args),
   resumeAutoRun,
   scheduleAutoRun,
   sendTabMessageUntilStopped,
@@ -17143,11 +17236,20 @@ async function ensureStep8VerificationPageReady(options = {}) {
     ...options,
     ...overrides,
   });
+  const isAllowedPhonePageState = (pageState) => Boolean(
+    options.allowPhoneVerificationPage
+    && (
+      pageState?.state === 'add_phone_page'
+      || pageState?.state === 'phone_verification_page'
+      || pageState?.addPhonePage
+      || pageState?.phoneVerificationPage
+    )
+  );
   let pageState = await inspectState();
   if (
     pageState.state === 'verification_page'
     || pageState.state === 'oauth_consent_page'
-    || (options.allowPhoneVerificationPage && pageState.state === 'phone_verification_page')
+    || isAllowedPhonePageState(pageState)
     || (options.allowAddEmailPage && pageState.state === 'add_email_page')
   ) {
     return pageState;
@@ -17226,7 +17328,7 @@ async function ensureStep8VerificationPageReady(options = {}) {
       if (
         pageState.state === 'verification_page'
         || pageState.state === 'oauth_consent_page'
-        || (options.allowPhoneVerificationPage && pageState.state === 'phone_verification_page')
+        || isAllowedPhonePageState(pageState)
         || (options.allowAddEmailPage && pageState.state === 'add_email_page')
       ) {
         return pageState;
@@ -17497,12 +17599,7 @@ async function waitForStep8Ready(tabId, timeoutMs = STEP8_READY_WAIT_TIMEOUT_MS,
       throw new Error(`${CLOUDFLARE_SECURITY_BLOCK_ERROR_PREFIX}${CLOUDFLARE_SECURITY_BLOCK_USER_MESSAGE}`);
     }
     if (pageState?.addPhonePage || pageState?.phoneVerificationPage) {
-      const urlPart = pageState?.url ? ` URL: ${pageState.url}` : '';
-      throw new Error(
-        pageState?.phoneVerificationPage
-          ? `步骤 ${visibleStep}：自动确认 OAuth 只处理 OAuth 授权页，当前仍在手机验证码页。${urlPart}`.trim()
-          : `步骤 ${visibleStep}：自动确认 OAuth 只处理 OAuth 授权页，当前仍在添加手机号页。${urlPart}`.trim()
-      );
+      return pageState;
     }
     if (pageState?.retryPage) {
       const retryUrl = String(pageState?.url || '').trim();
@@ -17704,10 +17801,20 @@ async function waitForStep8ClickEffect(tabId, baselineUrl, timeoutMs = STEP8_CLI
       throw new Error(`${CLOUDFLARE_SECURITY_BLOCK_ERROR_PREFIX}${CLOUDFLARE_SECURITY_BLOCK_USER_MESSAGE}`);
     }
     if (pageState?.addPhonePage) {
-      throw new Error(`步骤 ${visibleStep}：点击“继续”后页面跳到了手机号页面，当前流程无法继续自动授权。`);
+      return {
+        progressed: false,
+        reason: 'auth_fallback',
+        pageState,
+        url: pageState.url || baselineUrl || '',
+      };
     }
     if (pageState?.phoneVerificationPage) {
-      throw new Error(`步骤 ${visibleStep}：点击“继续”后页面跳到了手机验证码页，当前流程无法继续自动授权。`);
+      return {
+        progressed: false,
+        reason: 'auth_fallback',
+        pageState,
+        url: pageState.url || baselineUrl || '',
+      };
     }
     if (pageState?.verificationPage || pageState?.addEmailPage) {
       return {

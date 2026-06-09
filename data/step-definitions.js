@@ -39,6 +39,16 @@
     { id: 8, order: 80, key: 'paypal-approve', title: 'PayPal 登录与授权', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-approve' },
     { id: 9, order: 90, key: 'plus-checkout-return', title: '订阅回跳确认', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-return' },
   ];
+  const PPBOOM_PAYPAL_PREFIX_STEP_DEFINITIONS = [
+    { id: 1, order: 10, key: 'open-chatgpt', title: '打开 ChatGPT 官网', sourceId: 'chatgpt', driverId: null, command: 'open-chatgpt' },
+    { id: 2, order: 20, key: 'submit-signup-email', title: '注册并输入邮箱', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-signup-email' },
+    { id: 3, order: 30, key: 'fill-password', title: '填写密码并继续', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-password' },
+    { id: 4, order: 40, key: 'fetch-signup-code', title: '获取注册验证码', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'submit-verification-code', mailRuleId: 'openai-signup-code' },
+    { id: 5, order: 50, key: 'fill-profile', title: '填写姓名和生日', sourceId: 'openai-auth', driverId: 'content/signup-page', command: 'fill-profile' },
+    { id: 6, order: 60, key: 'plus-checkout-create', title: '爆破 Plus Checkout', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-create' },
+    { id: 7, order: 70, key: 'paypal-approve', title: 'PayPal 登录与授权', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-approve' },
+    { id: 8, order: 80, key: 'plus-checkout-return', title: '订阅回跳确认', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'plus-checkout-return' },
+  ];
   const PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS = PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS.slice(0, 6);
   const LOCAL_CPA_JSON_NO_RT_EXPORT_STEP_DEFINITION = {
     id: 7,
@@ -295,6 +305,7 @@
   const PLUS_PAYPAL_PHONE_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_PHONE);
   const PLUS_PAYPAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
   const PLUS_PAYPAL_HOSTED_CHECKOUT_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 7, 70, SIGNUP_METHOD_EMAIL);
+  const PPBOOM_PAYPAL_STEP_DEFINITIONS = createOpenAiSteps(PPBOOM_PAYPAL_PREFIX_STEP_DEFINITIONS, 9, 90, SIGNUP_METHOD_EMAIL);
   const PLUS_PAYPAL_SMS_OAUTH_STEP_DEFINITIONS = createPhoneSignupHostedCheckoutOauthWithBindEmailSteps();
   const PLUS_PAYPAL_PHONE_BIND_OAUTH_STEP_DEFINITIONS = createHostedCheckoutOauthBeforeConfirmSteps();
   const PLUS_PAYPAL_HOSTED_CHECKOUT_SUB2API_SESSION_STEP_DEFINITIONS = createHostedCheckoutSteps(
@@ -311,8 +322,30 @@
     SIGNUP_METHOD_EMAIL,
     { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION }
   );
+  const PPBOOM_PAYPAL_SUB2API_SESSION_STEP_DEFINITIONS = createOpenAiSteps(
+    PPBOOM_PAYPAL_PREFIX_STEP_DEFINITIONS,
+    9,
+    90,
+    SIGNUP_METHOD_EMAIL,
+    { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION }
+  );
+  const PPBOOM_PAYPAL_CPA_SESSION_STEP_DEFINITIONS = createOpenAiSteps(
+    PPBOOM_PAYPAL_PREFIX_STEP_DEFINITIONS,
+    9,
+    90,
+    SIGNUP_METHOD_EMAIL,
+    { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION }
+  );
   const PLUS_PAYPAL_HOSTED_CHECKOUT_PHONE_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 7, 70, SIGNUP_METHOD_PHONE);
   const PLUS_PAYPAL_HOSTED_CHECKOUT_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 7, 70, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
+  const PPBOOM_PAYPAL_PHONE_STEP_DEFINITIONS = createOpenAiSteps(PPBOOM_PAYPAL_PREFIX_STEP_DEFINITIONS, 9, 90, SIGNUP_METHOD_PHONE);
+  const PPBOOM_PAYPAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createOpenAiSteps(
+    PPBOOM_PAYPAL_PREFIX_STEP_DEFINITIONS,
+    9,
+    90,
+    SIGNUP_METHOD_PHONE,
+    { phoneSignupReloginAfterBindEmailEnabled: true }
+  );
   const PLUS_GOPAY_STEP_DEFINITIONS = createOpenAiSteps(PLUS_GOPAY_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_EMAIL);
   const PLUS_GOPAY_SUB2API_SESSION_STEP_DEFINITIONS = createOpenAiSteps(
     PLUS_GOPAY_PREFIX_STEP_DEFINITIONS,

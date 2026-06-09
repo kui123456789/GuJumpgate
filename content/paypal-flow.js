@@ -11,6 +11,7 @@ const PAYPAL_HOSTED_STAGE_VERIFICATION = 'verification';
 const PAYPAL_HOSTED_STAGE_REVIEW = 'review_consent';
 const PAYPAL_HOSTED_STAGE_REDIRECTING = 'redirecting';
 const PAYPAL_HOSTED_STAGE_APPROVAL = 'approval';
+const PAYPAL_HOSTED_STAGE_WALLET_MODAL = 'wallet_modal';
 const PAYPAL_HOSTED_STAGE_BLOCKED = 'blocked';
 const PAYPAL_HOSTED_STAGE_GENERIC_ERROR = 'generic_error';
 const PAYPAL_HOSTED_STAGE_UNKNOWN = 'unknown';
@@ -254,6 +255,12 @@ function findApproveButton() {
   ]);
 }
 
+function isPayPalAgreementApprovePage() {
+  const host = String(location?.host || '').toLowerCase();
+  const pathname = String(location?.pathname || '').toLowerCase();
+  return host.includes('paypal.com') && pathname.startsWith('/agreements/approve');
+}
+
 function getPayPalHostedPathname() {
   return String(location?.pathname || '').trim();
 }
@@ -418,17 +425,29 @@ function hasHostedRecoverableBlankVerificationError() {
 }
 
 function hasHostedInvalidVerificationCodeError() {
-  return /check\s+the\s+code\s+and\s+try\s+again|(?:sorry,\s*)?something\s+went\s+wrong\.?\s*get\s+a\s+new\s+code|get\s+a\s+new\s+code/i.test(getHostedVerificationErrorText());
+  return /check\s+the\s+code\s+and\s+try\s+again|(?:sorry,\s*)?something\s+went\s+wrong\.?\s*get\s+a\s+new\s+code|get\s+a\s+new\s+code|コードを確認してもう一度|コードが正しくありません|新しいコード|確認コード.*(?:無効|間違)|認証コード.*(?:無効|間違)/i.test(getHostedVerificationErrorText());
 }
 
 function findHostedVerificationResendButton() {
-  const direct = document.querySelector('button[data-testid="resend-link"]');
+  const direct = document.querySelector([
+    'button[data-testid="resend-link"]',
+    '[data-testid="resend-link"]',
+    'button[data-testid*="resend" i]',
+    '[data-testid*="resend" i]',
+    'button[id*="resend" i]',
+    '[role="button"][id*="resend" i]',
+    'button[name*="resend" i]',
+    '[role="button"][name*="resend" i]',
+    'button[aria-label*="resend" i]',
+    '[role="button"][aria-label*="resend" i]',
+  ].join(','));
   if (direct && isVisibleElement(direct) && isEnabledControl(direct)) {
     return direct;
   }
   return findClickableByText([
     /resend/i,
     /重新发送|重发/i,
+    /再送信|再送|コードを再送|確認コードを再送|認証コードを再送|新しいコード|もう一度送信|SMS\s*を再送/i,
   ]);
 }
 
@@ -444,9 +463,64 @@ function findHostedReviewConsentButton() {
   ]);
 }
 
+function isHostedAddPaymentMethodModalVisible() {
+  const modal = document.querySelector('.vx_modal-content');
+  if (!modal || !isVisibleElement(modal)) {
+    return false;
+  }
+  const header = normalizeText(
+    modal.querySelector('#js_modalHeader, .flow-modal-header, h1, h2, [role="heading"]')?.textContent || ''
+  );
+  return /支払方法を登録|支払い方法を登録|register payment method|add payment method/i.test(header);
+}
+
+function findHostedAddPaymentMethodModalCloseButton() {
+  const modal = document.querySelector('.vx_modal-content');
+  if (!modal || !isVisibleElement(modal)) {
+    return null;
+  }
+  const scope = modal.closest('#mainModal, .vx_modal-wrapper, .vx_modal-flow') || modal.parentElement || document;
+  const direct = scope.querySelector([
+    '#modalClose',
+    'a#modalClose',
+    'a[data-name="modalClose"]',
+    'a.modal_dismiss-btn',
+    'a.test_dismissFlow',
+    'a[role="button"][aria-label*="閉じる"]',
+    'a[role="button"][aria-label*="Close"]',
+    'button[aria-label*="閉じる"]',
+    'button[aria-label*="Close"]',
+    'button[data-testid*="close" i]',
+    'button[id*="close" i]',
+    '.vx_modal-header button',
+    '.vx_modal-wrapper a[role="button"]',
+  ].join(', '));
+  if (direct && isVisibleElement(direct) && isEnabledControl(direct)) {
+    return direct;
+  }
+  return getVisibleControls('#mainModal a[role="button"], #mainModal a, #mainModal button, .vx_modal-wrapper a[role="button"], .vx_modal-wrapper a, .vx_modal-wrapper button, .vx_modal-content button').find((button) => {
+    if (!isEnabledControl(button)) {
+      return false;
+    }
+    const text = normalizeText([
+      button.textContent,
+      button.getAttribute?.('aria-label'),
+      button.getAttribute?.('title'),
+      button.getAttribute?.('data-name'),
+      button.getAttribute?.('data-testid'),
+      button.id,
+      button.className,
+    ].filter(Boolean).join(' '));
+    return /閉じる|close|cancel|dismiss|戻る/i.test(text) || (!text && button.querySelector('svg, [class*="icon" i]'));
+  }) || null;
+}
+
 function detectPayPalHostedCheckoutStage() {
   if (!/paypal\./i.test(String(location?.host || ''))) {
     return PAYPAL_HOSTED_STAGE_OUTSIDE;
+  }
+  if (isHostedAddPaymentMethodModalVisible()) {
+    return PAYPAL_HOSTED_STAGE_WALLET_MODAL;
   }
   if (hasHostedVerificationInputs()) {
     return PAYPAL_HOSTED_STAGE_VERIFICATION;
@@ -614,11 +688,11 @@ function fillHostedBillingState(address = {}) {
   return true;
 }
 
-function normalizeHostedPayPalDateOfBirth(value = '') {
+function normalizeHostedPayPalDateOfBirth(value = '', countryCode = 'US') {
   const raw = normalizeText(value);
   const match = raw.match(/(\d{1,4})\D+(\d{1,2})\D+(\d{1,4})/);
   if (!match) {
-    return '09/05/1976';
+    return generateHostedPayPalDateOfBirth(countryCode);
   }
   const first = Number.parseInt(match[1], 10);
   const second = Number.parseInt(match[2], 10);
@@ -627,7 +701,23 @@ function normalizeHostedPayPalDateOfBirth(value = '') {
   const month = match[1].length === 4 ? second : first;
   const day = match[1].length === 4 ? third : second;
   if (!Number.isFinite(year) || year < 1900 || year > 2008 || month < 1 || month > 12 || day < 1 || day > 31) {
-    return '09/05/1976';
+    return generateHostedPayPalDateOfBirth(countryCode);
+  }
+  if (String(countryCode || '').trim().toUpperCase() === 'JP') {
+    return `${String(year).padStart(4, '0')}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+  }
+  return `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}/${String(year).padStart(4, '0')}`;
+}
+
+function generateHostedPayPalDateOfBirth(countryCode = 'US') {
+  const currentYear = new Date().getFullYear();
+  const age = 19 + Math.floor(Math.random() * 7);
+  const year = currentYear - age;
+  const month = 1 + Math.floor(Math.random() * 12);
+  const maxDay = new Date(year, month, 0).getDate();
+  const day = 1 + Math.floor(Math.random() * maxDay);
+  if (String(countryCode || '').trim().toUpperCase() === 'JP') {
+    return `${String(year).padStart(4, '0')}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
   }
   return `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}/${String(year).padStart(4, '0')}`;
 }
@@ -683,7 +773,8 @@ function normalizeHostedPayPalNamePart(value = '', fallback = '') {
 
 function isHostedNationalityUnitedStates() {
   const text = normalizeText(document.body?.innerText || '');
-  return /country of nationality is\s+United States/i.test(text);
+  return /country of nationality is\s+United States|国籍.*(?:米国|アメリカ合衆国|アメリカ)|(?:米国|アメリカ合衆国|アメリカ).*国籍/i.test(text)
+    || Boolean(document.querySelector('[data-testid="english-names"]'));
 }
 
 function findHostedNationalityChangeButton() {
@@ -693,7 +784,10 @@ function findHostedNationalityChangeButton() {
   }
   return getVisibleControls('button, [role="button"], [role="selection-menu-button"]').find((button) => {
     const text = getActionText(button);
-    return /nationality|country/i.test(text) && /change|edit/i.test(text);
+    const parentText = normalizeText(button.closest('[data-testid], fieldset, section, div')?.textContent || '');
+    return (/nationality|citizenship|country|国籍|市民権|居住国|国・地域/i.test(text) && /change|edit|変更|編集|変える|切り替え|選択/i.test(text))
+      || (/change|edit|変更|編集|変える|切り替え|選択/i.test(text) && /nationality|citizenship|country|国籍|市民権|居住国|国・地域/i.test(parentText))
+      || ((/日本|Japan/i.test(text) || /日本|Japan/i.test(parentText)) && /nationality|citizenship|country|国籍|市民権|居住国|国・地域/i.test(parentText));
   }) || null;
 }
 
@@ -703,8 +797,13 @@ function findHostedUnitedStatesNationalityOption() {
     if (!isEnabledControl(node)) {
       return false;
     }
-    const text = normalizeText(node.textContent || getActionText(node));
-    return /^United States$/i.test(text) || /^United States of America$/i.test(text) || /^US$/i.test(text);
+    const text = normalizeText([
+      node.textContent,
+      getActionText(node),
+      node.getAttribute?.('data-value'),
+      node.getAttribute?.('value'),
+    ].filter(Boolean).join(' '));
+    return /^(United States|United States of America|US|USA|U\.S\.A\.|米国|アメリカ合衆国|アメリカ)$/i.test(text);
   }) || null;
   return match?.closest?.('button, [role="option"], [role="button"], li') || match;
 }
@@ -744,28 +843,50 @@ async function switchHostedNationalityToUnitedStatesIfNeeded(countryCode = '') {
 }
 
 function selectHostedCountryByCode(countryCode = 'US') {
-  const select = document.getElementById('country');
-  if (!select) {
-    return false;
-  }
   const expectedCode = String(countryCode || '').trim().toUpperCase() === 'JP' ? 'JP' : 'US';
-  if (String(select.value || '').trim().toUpperCase() === expectedCode) {
-    return false;
+  const selects = Array.from(document.querySelectorAll('select'));
+  for (const select of selects) {
+    const label = normalizeText([
+      select.id,
+      select.name,
+      select.getAttribute('aria-label'),
+      select.getAttribute('title'),
+      select.closest('label')?.textContent,
+    ].filter(Boolean).join(' ')).toLowerCase();
+    if (
+      !/country|billingcountry|countryregion|国|国・地域|国\/地域|請求先住所の国|請求先国/i.test(label)
+      && select.id !== 'country'
+      && select.name !== 'country'
+      && select.id !== 'billingCountry'
+      && select.name !== 'billingCountry'
+    ) {
+      continue;
+    }
+    if (String(select.value || '').trim().toUpperCase() === expectedCode) {
+      return false;
+    }
+    const matchedOption = Array.from(select.options || []).find((option) => {
+      const value = normalizeText(option?.value || '').toUpperCase();
+      const text = normalizeText(option?.textContent || option?.label || '');
+      const lower = text.toLowerCase();
+      if (value === expectedCode) {
+        return true;
+      }
+      if (expectedCode === 'JP') {
+        return lower === 'japan' || lower.includes('日本');
+      }
+      return lower === 'united states' || lower === 'united states of america' || lower === 'usa' || lower.includes('美国');
+    });
+    if (!matchedOption) {
+      continue;
+    }
+    select.value = matchedOption.value;
+    matchedOption.selected = true;
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
   }
-  const matchedOption = Array.from(select.options || []).find((option) => {
-    const value = normalizeText(option?.value || '').toUpperCase();
-    const label = normalizeText(option?.textContent || option?.label || '').toLowerCase();
-    if (value === expectedCode) {
-      return true;
-    }
-    if (expectedCode === 'JP') {
-      return label === 'japan' || label.includes('日本');
-    }
-    return label === 'united states' || label === 'united states of america' || label === 'usa' || label.includes('美国');
-  });
-  select.value = matchedOption?.value || expectedCode;
-  select.dispatchEvent(new Event('change', { bubbles: true }));
-  return true;
+  return false;
 }
 
 function isHostedGuestCheckoutLikelyEnglish() {
@@ -793,27 +914,7 @@ function findHostedEnglishLanguageButton() {
 }
 
 async function switchHostedGuestCheckoutToEnglishIfNeeded(countryCode = '') {
-  const expectedCode = String(countryCode || '').trim().toUpperCase();
-  if (expectedCode !== 'JP' || isHostedGuestCheckoutLikelyEnglish()) {
-    return false;
-  }
-  const button = findHostedEnglishLanguageButton();
-  if (!button) {
-    return false;
-  }
-  log('PayPal guest checkout：检测到日区页面，先切换到 English 后再填写。', 'info');
-  simulateClick(button);
-  try {
-    await waitUntil(() => isHostedGuestCheckoutLikelyEnglish() || !findHostedEnglishLanguageButton(), {
-      intervalMs: 300,
-      timeoutMs: 8000,
-    });
-  } catch {
-    log('PayPal guest checkout：等待 English 页面完成超时，继续按当前页面状态尝试填写。', 'warn');
-  }
-  await waitForDocumentComplete();
-  await sleep(1000);
-  return true;
+  return false;
 }
 
 function removeHostedCaptchaArtifacts() {
@@ -1129,7 +1230,10 @@ async function fillHostedGuestCheckout(payload = {}) {
   const cardNumber = String(payload.cardNumber || card.number).replace(/\s+/g, '');
   const cardExpiry = normalizeText(payload.cardExpiry || card.expiry);
   const cardCvv = normalizeText(payload.cardCvv || card.cvv);
-  const dateOfBirth = normalizeHostedPayPalDateOfBirth(payload.dateOfBirth || address.dateOfBirth || '09/05/1976');
+  const dateOfBirth = normalizeHostedPayPalDateOfBirth(
+    payload.dateOfBirth || address.dateOfBirth || '',
+    address.countryCode || payload.countryCode || 'US'
+  );
 
   if (!email || !phone || !password || !cardNumber || !cardExpiry || !cardCvv) {
     throw new Error('PayPal hosted checkout 缺少卡支付所需资料（请先填写 PayPal 电话(不带+1) 或导入 PayPal 接码池）。');
@@ -1142,9 +1246,10 @@ async function fillHostedGuestCheckout(payload = {}) {
   fillHostedInputById('cardCvv', cardCvv);
   fillHostedInputById('password', password);
   fillHostedInputById('dateOfBirth', dateOfBirth);
-  await switchHostedNationalityToUnitedStatesIfNeeded(address.countryCode || payload.countryCode || '');
   fillHostedInputById('firstName', firstName);
   fillHostedInputById('lastName', lastName);
+  fillHostedInputById('countrySpecificFirstName', normalizeText(payload.countrySpecificFirstName || 'タロウ'));
+  fillHostedInputById('countrySpecificLastName', normalizeText(payload.countrySpecificLastName || 'ヤマダ'));
   fillHostedInputById('billingLine1', address.street || '');
   fillHostedInputById('billingCity', address.city || '');
   fillHostedInputById('billingPostalCode', address.zip || '');
@@ -1205,8 +1310,27 @@ async function clickHostedReviewConsent() {
   throw new Error('PayPal hosted checkout 账单确认页超时，未找到 Agree & Continue 按钮。');
 }
 
+async function dismissHostedAddPaymentMethodModal() {
+  await waitForDocumentComplete();
+  const button = await waitUntil(() => findHostedAddPaymentMethodModalCloseButton(), {
+    intervalMs: 250,
+    timeoutMs: 10000,
+    timeoutMessage: 'PayPal hosted checkout 新的支付方式弹窗未找到可关闭的 X 按钮。',
+  });
+  simulateClick(button);
+  await sleep(1000);
+  return {
+    stage: PAYPAL_HOSTED_STAGE_WALLET_MODAL,
+    submitted: true,
+    modalDismissed: true,
+  };
+}
+
 async function runHostedCheckoutStep(payload = {}) {
   const stage = detectPayPalHostedCheckoutStage();
+  if (isHostedAddPaymentMethodModalVisible()) {
+    return dismissHostedAddPaymentMethodModal();
+  }
   if (payload.resendVerificationCode && stage !== PAYPAL_HOSTED_STAGE_VERIFICATION) {
     return {
       stage,
@@ -1234,6 +1358,9 @@ async function runHostedCheckoutStep(payload = {}) {
   }
   if (stage === PAYPAL_HOSTED_STAGE_GUEST_CHECKOUT) {
     return fillHostedGuestCheckout(payload);
+  }
+  if (stage === PAYPAL_HOSTED_STAGE_WALLET_MODAL) {
+    return dismissHostedAddPaymentMethodModal();
   }
   if (stage === PAYPAL_HOSTED_STAGE_REVIEW) {
     return clickHostedReviewConsent();
@@ -1454,7 +1581,7 @@ async function clickPayPalApprove() {
   await waitForDocumentComplete();
   await dismissPayPalPrompts().catch(() => ({ clicked: 0 }));
 
-  const button = findApproveButton();
+  const button = findApproveButton() || findHostedReviewConsentButton();
   if (!button || !isEnabledControl(button)) {
     return {
       clicked: false,
@@ -1475,16 +1602,23 @@ function inspectPayPalState() {
   const emailInput = findEmailInput();
   const passwordInput = findPasswordInput();
   const approveButton = findApproveButton();
+  const hostedReviewButton = findHostedReviewConsentButton();
   const loginPhase = getPayPalLoginPhase(emailInput, passwordInput);
   const hostedStage = detectPayPalHostedCheckoutStage();
+  const agreementApprovePage = isPayPalAgreementApprovePage();
+  const approvalReady = Boolean(
+    (approveButton && isEnabledControl(approveButton))
+    || (hostedReviewButton && isEnabledControl(hostedReviewButton))
+  );
   return {
     url: location.href,
     readyState: document.readyState,
     hostedStage,
-    needsLogin: Boolean(loginPhase),
-    loginPhase,
+    needsLogin: agreementApprovePage || approvalReady ? false : Boolean(loginPhase),
+    loginPhase: agreementApprovePage || approvalReady ? '' : loginPhase,
     hasEmailInput: Boolean(emailInput),
     hasPasswordInput: Boolean(passwordInput),
+    agreementApprovePage,
     hostedAccountCreateEmail: hostedStage === PAYPAL_HOSTED_STAGE_ACCOUNT_CREATE_EMAIL,
     hostedAccountCreateEmailContinueReady: Boolean(findHostedAccountCreateEmailContinueButton()),
     hasHostedGuestCheckout: hostedStage === PAYPAL_HOSTED_STAGE_GUEST_CHECKOUT,
@@ -1503,8 +1637,9 @@ function inspectPayPalState() {
     hostedVerificationBlankError: hasHostedRecoverableBlankVerificationError(),
     hostedVerificationErrorText: getHostedVerificationErrorText(),
     hostedVerificationResendReady: Boolean(findHostedVerificationResendButton()),
-    reviewConsentReady: Boolean(findHostedReviewConsentButton()),
-    approveReady: Boolean(approveButton && isEnabledControl(approveButton)),
+    hostedWalletModalVisible: hostedStage === PAYPAL_HOSTED_STAGE_WALLET_MODAL,
+    reviewConsentReady: Boolean(hostedReviewButton && isEnabledControl(hostedReviewButton)),
+    approveReady: approvalReady,
     approveButtonText: approveButton ? getActionText(approveButton) : '',
     hasPasskeyPrompt: hasPasskeyPrompt(),
     bodyTextPreview: normalizeText(document.body?.innerText || '').slice(0, 240),

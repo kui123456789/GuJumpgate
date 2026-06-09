@@ -29,7 +29,8 @@
     const PHONE_RESEND_ROUTE_405_MAX_RECOVERIES = 2;
     const PHONE_RESEND_ROUTE_405_MAX_RECOVERY_TOTAL_MS = 12000;
     const PHONE_RESEND_THROTTLED_PATTERN = /tried\s+to\s+resend\s+too\s+many\s+times|please\s+try\s+again\s+later|too\s+many\s+resend|resend\s+too\s+many|发送.*过于频繁|稍后再试|重试次数过多/i;
-    const PHONE_RESEND_BANNED_NUMBER_PATTERN = /无法向此电话号码发送短信|无法向此手机号发送短信|无法发送短信到此电话号码|无法发送短信到此手机号|can(?:not|'t)\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i;
+    const PHONE_RESEND_BANNED_NUMBER_PATTERN = /无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)|无法发送(?:短信|验证码)到(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)|can(?:not|'t)\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number/i;
+    const PHONE_SMS_SWITCHED_TO_WHATSAPP_PATTERN = /无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)[\s\S]{0,80}(?:切换|改用|转为|转到)[\s\S]{0,40}whats\s*app|(?:switched|fallback|fall\s*back|changed)[\s\S]{0,80}whats\s*app[\s\S]{0,80}(?:sms|text|phone\s+number|verification\s+code|code)/i;
     const PHONE_RESEND_SERVER_ERROR_PATTERN = /this\s+page\s+isn['’]?t\s+working|currently\s+unable\s+to\s+handle\s+this\s+request|http\s+error\s+500|500\s+internal\s+server\s+error/i;
     const PHONE_ROUTE_405_PATTERN = /405\s+method\s+not\s+allowed|route\s+error.*405|did\s+not\s+provide\s+an?\s+[`'"]?action|post\s+request\s+to\s+["']?\/phone-verification/i;
     const PHONE_ROUTE_405_MAX_RECOVERY_CLICKS = 3;
@@ -337,6 +338,32 @@
       return bestMatch;
     }
 
+    function getCountryOptionDialCode(option, phoneNumber = '') {
+      if (!option) {
+        return '';
+      }
+      const labels = [
+        getOptionLabel(option),
+        ...getCountryOptionMatchLabels(option),
+      ];
+      const directDialCode = labels
+        .map((label) => normalizePhoneDigits(extractDialCodeFromText(label)))
+        .find(Boolean);
+      if (directDialCode) {
+        return directDialCode;
+      }
+      if (typeof phoneCountryUtils.resolveDialCodeFromPhoneNumber === 'function') {
+        return phoneCountryUtils.resolveDialCodeFromPhoneNumber(phoneNumber, labels);
+      }
+      return '';
+    }
+
+    function resolveTargetCountryOption(countryLabel, phoneNumber = '') {
+      return findCountryOptionByLabel(countryLabel)
+        || findCountryOptionByPhoneNumber(phoneNumber)
+        || null;
+    }
+
     async function trySelectCountryOption(select, targetOption) {
       if (!select || !targetOption) {
         return false;
@@ -357,23 +384,64 @@
       return Boolean(nextSelectedOption && isSameCountryOption(nextSelectedOption, targetOption));
     }
 
-    async function ensureCountrySelected(countryLabel, phoneNumber = '') {
-      const select = getCountrySelect();
-      if (!select) {
-        return false;
+    function getCountrySelectionSnapshot(targetOption, phoneNumber = '') {
+      const selectedOption = getSelectedCountryOption();
+      const selectedMatchesTarget = Boolean(
+        selectedOption
+        && targetOption
+        && isSameCountryOption(selectedOption, targetOption)
+      );
+      const expectedDialCode = getCountryOptionDialCode(targetOption, phoneNumber)
+        || (typeof phoneCountryUtils.resolveDialCodeFromPhoneNumber === 'function'
+          ? phoneCountryUtils.resolveDialCodeFromPhoneNumber(phoneNumber, [])
+          : '');
+      const displayedDialCode = normalizePhoneDigits(getDisplayedDialCode());
+      const dialCodeSettled = Boolean(
+        !expectedDialCode
+        || !displayedDialCode
+        || displayedDialCode === expectedDialCode
+      );
+      return {
+        selectedOption,
+        selectedMatchesTarget,
+        expectedDialCode,
+        displayedDialCode,
+        dialCodeSettled,
+      };
+    }
+
+    async function ensureCountrySelected(countryLabel, phoneNumber = '', timeout = 15000) {
+      const start = Date.now();
+      let lastSnapshot = null;
+      while (Date.now() - start < timeout) {
+        throwIfStopped();
+        const select = getCountrySelect();
+        const targetOption = resolveTargetCountryOption(countryLabel, phoneNumber);
+        if (!select || !targetOption) {
+          await sleep(200);
+          continue;
+        }
+
+        await trySelectCountryOption(select, targetOption);
+        lastSnapshot = getCountrySelectionSnapshot(targetOption, phoneNumber);
+        if (lastSnapshot.selectedMatchesTarget && lastSnapshot.dialCodeSettled) {
+          return {
+            ok: true,
+            dialCode: lastSnapshot.expectedDialCode || lastSnapshot.displayedDialCode || '',
+            selectedLabel: getOptionLabel(lastSnapshot.selectedOption),
+            displayedDialCode: lastSnapshot.displayedDialCode,
+          };
+        }
+
+        await sleep(250);
       }
 
-      const byLabel = findCountryOptionByLabel(countryLabel);
-      if (await trySelectCountryOption(select, byLabel)) {
-        return true;
-      }
-
-      const byPhoneNumber = findCountryOptionByPhoneNumber(phoneNumber);
-      if (await trySelectCountryOption(select, byPhoneNumber)) {
-        return true;
-      }
-
-      return Boolean(getSelectedCountryOption());
+      return {
+        ok: false,
+        dialCode: lastSnapshot?.expectedDialCode || '',
+        displayedDialCode: lastSnapshot?.displayedDialCode || '',
+        selectedLabel: getOptionLabel(lastSnapshot?.selectedOption),
+      };
     }
 
     function normalizeInlineText(value) {
@@ -821,7 +889,7 @@
 
     function getAddPhoneErrorText() {
       const form = getAddPhoneForm();
-      if (!form) {
+      if (!form && !document?.querySelector) {
         return '';
       }
 
@@ -834,26 +902,57 @@
         '[aria-invalid="true"] + *',
         '[class*="error"]',
       ];
-      for (const selector of selectors) {
-        form.querySelectorAll(selector).forEach((el) => {
-          const text = String(el?.textContent || '').replace(/\s+/g, ' ').trim();
-          if (text) {
-            messages.push(text);
-          }
-        });
+      const roots = [
+        form,
+        document.querySelector('main'),
+        document.body,
+      ].filter(Boolean);
+      const seen = new Set();
+      const pushMessage = (value) => {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) {
+          return;
+        }
+        const key = text.toLowerCase();
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        messages.push(text);
+      };
+
+      for (const root of roots) {
+        for (const selector of selectors) {
+          root.querySelectorAll(selector).forEach((el) => {
+            pushMessage(el?.textContent || '');
+          });
+        }
       }
 
-      const invalidInput = form.querySelector('input[aria-invalid="true"], input[data-invalid="true"]');
-      if (invalidInput) {
-        const wrapper = invalidInput.closest('form, [data-rac], div');
-        const text = String(wrapper?.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text) {
-          messages.push(text);
+      document.querySelectorAll('ul[class*="error"], [role="alert"], [aria-live]').forEach((el) => {
+        pushMessage(el?.textContent || '');
+      });
+
+      const pageSnapshot = String(getPageTextSnapshot?.() || '').replace(/\s+/g, ' ').trim();
+      if (pageSnapshot && PHONE_SMS_SWITCHED_TO_WHATSAPP_PATTERN.test(pageSnapshot)) {
+        const concise = pageSnapshot.match(
+          /无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)[^。!?]*whats\s*app[^。!?]*[。!?]?|(?:switched|fallback|fall\s*back|changed)[^.。!?]*whats\s*app[^.。!?]*(?:sms|text|phone\s+number|verification\s+code|code)[^.。!?]*[.。!?]?/i
+        );
+        pushMessage(concise?.[0] || pageSnapshot);
+      }
+
+      if (form) {
+        const invalidInput = form.querySelector('input[aria-invalid="true"], input[data-invalid="true"]');
+        if (invalidInput) {
+          const wrapper = invalidInput.closest('form, [data-rac], div');
+          pushMessage(wrapper?.textContent || '');
         }
       }
 
       const preferred = messages.find((text) => (
-        /already|used|linked|eligible|invalid|phone|号码|手机号|错误|失败|try\s+again/i.test(text)
+        PHONE_SMS_SWITCHED_TO_WHATSAPP_PATTERN.test(text)
+      )) || messages.find((text) => (
+        /already|used|linked|eligible|invalid|phone|号码|手机号|错误|失败|try\s+again|whats\s*app/i.test(text)
       ));
       return preferred || messages[0] || '';
     }
@@ -912,7 +1011,7 @@
       const pageSnapshot = String(getPageTextSnapshot?.() || '').replace(/\s+/g, ' ').trim();
       if (pageSnapshot && PHONE_RESEND_BANNED_NUMBER_PATTERN.test(pageSnapshot)) {
         const concise = pageSnapshot.match(
-          /无法向此电话号码发送短信|无法向此手机号发送短信|无法发送短信到此电话号码|无法发送短信到此手机号|can(?:not|'t)\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number[^.。!?]*[.。!?]?|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?)\s+to\s+(?:this|that)\s+(?:phone\s+)?number[^.。!?]*[.。!?]?/i
+          /无法向(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)发送(?:短信|验证码)[^。!?]*[。!?]?|无法发送(?:短信|验证码)到(?:此|该|这个)?(?:电话号码|手机号|手机号码|号码)[^。!?]*[。!?]?|can(?:not|'t)\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number[^.。!?]*[.。!?]?|unable\s+to\s+send\s+(?:an?\s+)?(?:sms|text(?:\s+message)?|verification\s+code|code)\s+to\s+(?:this|that)\s+(?:phone\s+)?number[^.。!?]*[.。!?]?/i
         );
         return String(concise?.[0] || pageSnapshot).trim();
       }
@@ -1126,9 +1225,11 @@
       const isExplicitInternational = isExplicitInternationalPhoneInput(payload.phoneNumber);
       await waitForAddPhoneReady();
       await ensureSmsChannelSelected();
-      const countrySelected = await ensureCountrySelected(countryLabel, payload.phoneNumber);
-      if (!countrySelected) {
-        throw new Error(`Failed to select "${countryLabel || 'target country'}" on the add-phone page.`);
+      const countrySelection = await ensureCountrySelected(countryLabel, payload.phoneNumber);
+      if (!countrySelection?.ok) {
+        const expectedSuffix = countrySelection?.dialCode ? ` expected +${countrySelection.dialCode}` : '';
+        const displayedSuffix = countrySelection?.displayedDialCode ? ` but displayed +${countrySelection.displayedDialCode}` : '';
+        throw new Error(`Failed to select "${countryLabel || 'target country'}" on the add-phone page.${expectedSuffix}${displayedSuffix}`.trim());
       }
 
       const addPhoneDeliveryInfo = getAddPhoneDeliveryInfo();
@@ -1138,7 +1239,12 @@
         );
       }
 
-      const dialCode = getDisplayedDialCode();
+      const displayedDialCode = normalizePhoneDigits(getDisplayedDialCode());
+      const selectedDialCode = normalizePhoneDigits(countrySelection.dialCode);
+      if (selectedDialCode && displayedDialCode && displayedDialCode !== selectedDialCode) {
+        throw new Error(`Failed to select "${countryLabel || 'target country'}" on the add-phone page. expected +${selectedDialCode} but displayed +${displayedDialCode}`);
+      }
+      const dialCode = selectedDialCode || displayedDialCode;
       if (!dialCode && !isExplicitInternational) {
         throw new Error(`Could not determine the dial code for "${countryLabel}" on the add-phone page.`);
       }
@@ -1388,20 +1494,21 @@
       return activePhoneResendPromise;
     }
 
-    async function returnToAddPhone(timeout = 20000) {
-      if (isAddPhonePageReady()) {
+    async function returnToAddPhone(timeout = 20000, options = {}) {
+      const forceReload = Boolean(options?.forceReload);
+      if (isAddPhonePageReady() && !forceReload) {
         return {
           addPhonePage: true,
           url: location.href,
         };
       }
 
-      if (!isPhoneVerificationPageReady()) {
+      if (!forceReload && !isPhoneVerificationPageReady()) {
         throw new Error('The auth page is not currently on phone verification or add-phone page.');
       }
 
       await performOperationWithDelay({ stepKey: 'phone-auth', kind: 'navigation', label: 'phone-return-add-phone' }, async () => {
-        location.assign('/add-phone');
+        location.assign('https://auth.openai.com/add-phone');
       });
       await waitForAddPhoneReady(timeout);
       return {
@@ -1412,6 +1519,7 @@
 
     return {
       getAddPhoneDeliveryInfo,
+      getAddPhoneErrorText,
       getPhoneVerificationDeliveryInfo,
       getPhoneVerificationDisplayedPhone,
       checkPhoneResendError,
