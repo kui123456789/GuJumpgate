@@ -396,6 +396,10 @@
     return options?.plusHostedCheckoutIsFinalStep !== false;
   }
 
+  function shouldStopPixAfterRedeem(options = {}) {
+    return Boolean(options?.pixRedeemStopAfterRedeem);
+  }
+
   function normalizePlusPaymentMethod(value = '') {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === PLUS_PAYMENT_METHOD_GOPAY) {
@@ -495,6 +499,9 @@
       return PLUS_GOPAY_STEP_DEFINITIONS;
     }
     if (paymentMethod === PLUS_PAYMENT_METHOD_PIX) {
+      if (shouldStopPixAfterRedeem(options)) {
+        return PLUS_PIX_PREFIX_STEP_DEFINITIONS;
+      }
       if (signupMethod === SIGNUP_METHOD_PHONE) {
         return reloginAfterBindEmail
           ? PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS

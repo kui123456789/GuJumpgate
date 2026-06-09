@@ -233,6 +233,12 @@ const PLUS_PIX_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = self.MultiPageStepDe
   signupMethod: 'phone',
   phoneSignupReloginAfterBindEmailEnabled: true,
 }) || PLUS_PIX_PHONE_STEP_DEFINITIONS;
+const PLUS_PIX_REDEEM_ONLY_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
+  activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
+  plusModeEnabled: true,
+  plusPaymentMethod: 'pix',
+  pixRedeemStopAfterRedeem: true,
+}) || PLUS_PIX_STEP_DEFINITIONS.slice(0, 6);
 const LOCAL_CPA_JSON_NO_RT_STEP_DEFINITIONS = self.MultiPageStepDefinitions?.getSteps?.({
   activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
   panelMode: 'local-cpa-json-no-rt',
@@ -989,6 +995,7 @@ function getStepDefinitionsForState(state = {}) {
       plusAccountAccessStrategy: normalizePlusAccountAccessStrategyForState(state),
       signupMethod: getSignupMethodForStepDefinitions(state),
       phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
+      pixRedeemStopAfterRedeem: Boolean(state?.pixRedeemStopAfterRedeem),
     });
     if (Array.isArray(definitions)) {
       return definitions;
@@ -1025,6 +1032,9 @@ function getStepDefinitionsForState(state = {}) {
     return PLUS_GOPAY_STEP_DEFINITIONS;
   }
   if (paymentMethod === PLUS_PAYMENT_METHOD_PIX) {
+    if (state?.pixRedeemStopAfterRedeem) {
+      return PLUS_PIX_REDEEM_ONLY_STEP_DEFINITIONS;
+    }
     if (plusAccountAccessStrategy === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
       return PLUS_PIX_SUB2API_SESSION_STEP_DEFINITIONS;
     }
@@ -1258,6 +1268,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   pixRedeemApiBaseUrl: '',
   pixRedeemExternalApiKey: '',
   pixRedeemClientId: '',
+  pixRedeemStopAfterRedeem: false,
   pixRedeemCdkeyPoolText: '',
   pixRedeemCdkeyUsage: {},
   chatGptApiSmsPoolText: '',
@@ -4187,6 +4198,8 @@ function normalizePersistentSettingValue(key, value) {
       return String(value || '').trim();
     case 'pixRedeemClientId':
       return String(value || '').trim();
+    case 'pixRedeemStopAfterRedeem':
+      return Boolean(value);
     case 'pixRedeemCdkeyPoolText': {
       const seen = new Set();
       return String(value || '')

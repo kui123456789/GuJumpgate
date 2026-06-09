@@ -79,6 +79,27 @@ test('pix plus flow redeems a cdkey after registration before OAuth', () => {
   assert.equal(redeemStep?.command, 'pix-redeem');
 });
 
+test('pix plus flow can stop after cdkey redeem', () => {
+  const keys = keysFor({
+    plusModeEnabled: true,
+    plusPaymentMethod: 'pix',
+    pixRedeemStopAfterRedeem: true,
+  });
+
+  assert.deepEqual(keys, [
+    'open-chatgpt',
+    'submit-signup-email',
+    'fill-password',
+    'fetch-signup-code',
+    'fill-profile',
+    'pix-redeem',
+  ]);
+  assert.equal(keys.includes('oauth-login'), false);
+  assert.equal(keys.includes('fetch-login-code'), false);
+  assert.equal(keys.includes('confirm-oauth'), false);
+  assert.equal(keys.includes('platform-verify'), false);
+});
+
 test('hosted checkout keeps plus checkout creation before OAuth after removing passkey step', () => {
   const keys = keysFor({
     plusModeEnabled: true,

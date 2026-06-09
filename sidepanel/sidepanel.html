@@ -591,6 +591,16 @@
           placeholder="可留空自动生成；填 cdk_redeem_client_id 可同步网页记录" autocomplete="off"
           title="cdk 后台按 X-Client-Id 分组记录；填入 cdk 页面 localStorage 的 cdk_redeem_client_id 可让网页看到扩展提交记录" />
       </div>
+      <div class="data-row data-check-row" id="row-pix-redeem-stop-after-redeem" style="display:none;">
+        <span class="data-label">兑换后停止</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="input-pix-redeem-stop-after-redeem" />
+          <span class="toggle-switch-track" aria-hidden="true">
+            <span class="toggle-switch-thumb"></span>
+          </span>
+        </label>
+        <span class="setting-caption">Pix 卡密兑换成功后结束流程，不执行后续 OAuth、验证码和平台回调</span>
+      </div>
       <div class="data-row data-check-row" id="row-pix-redeem-cdkey-pool" style="display:none;">
         <span class="data-label">Pix 卡密池</span>
         <div class="hotmail-import-box">

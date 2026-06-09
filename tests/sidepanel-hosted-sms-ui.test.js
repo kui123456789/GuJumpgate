@@ -88,6 +88,8 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     'btn-toggle-pix-redeem-external-api-key',
     'row-pix-redeem-client-id',
     'input-pix-redeem-client-id',
+    'row-pix-redeem-stop-after-redeem',
+    'input-pix-redeem-stop-after-redeem',
     'row-pix-redeem-cdkey-pool',
     'input-pix-redeem-cdkey-pool',
     'pix-redeem-cdkey-pool-summary',
@@ -105,6 +107,21 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
     sidepanelJs,
     /rowPixRedeemApiBaseUrl[\s\S]*?rowPixRedeemExternalApiKey[\s\S]*?rowPixRedeemCdkeyPool[\s\S]*?pixRowsVisible\s*\?\s*''\s*:\s*'none'/,
     'Pix API、Key、卡密池行应统一跟随 pixRowsVisible 显示/隐藏'
+  );
+  assert.match(
+    sidepanelHtml,
+    /兑换后停止[\s\S]*不执行后续 OAuth/,
+    'Pix 设置应提供兑换后停止的选择'
+  );
+  assert.match(
+    sidepanelJs,
+    /pixRedeemStopAfterRedeem:\s*Boolean\(inputPixRedeemStopAfterRedeem\?\.checked\)/,
+    '保存配置时应写入 Pix 兑换后停止开关'
+  );
+  assert.match(
+    sidepanelJs,
+    /inputPixRedeemStopAfterRedeem\.checked\s*=\s*Boolean\(state\?\.pixRedeemStopAfterRedeem\)/,
+    '恢复配置时应回填 Pix 兑换后停止开关'
   );
   assert.match(
     sidepanelJs,
