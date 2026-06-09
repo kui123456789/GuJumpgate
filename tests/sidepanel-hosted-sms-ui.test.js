@@ -177,6 +177,16 @@ test('sidepanel exposes Pix redeem settings only for Pix payment', () => {
   );
   assert.match(
     sidepanelJs,
+    /function\s+shouldPreserveFocusedPixRedeemCdkeyPoolEdit\s*\(/,
+    'Pix 卡密池应有聚焦编辑保护，避免同步回写吃掉刚按下的回车'
+  );
+  assert.match(
+    sidepanelJs,
+    /!shouldPreserveFocusedPixRedeemCdkeyPoolEdit\(\)[\s\S]*inputPixRedeemCdkeyPool\.value\s*=\s*normalizePixRedeemCdkeyPoolTextValue\(message\.payload\.pixRedeemCdkeyPoolText\)/,
+    '后台同步 Pix 卡密池时不能覆盖正在编辑的 textarea'
+  );
+  assert.match(
+    sidepanelJs,
     /enabled:\s*item\.enabled\s*!==\s*false/,
     'Pix 卡密 usage 应持久化启用状态，旧数据默认启用'
   );

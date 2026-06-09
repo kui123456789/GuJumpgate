@@ -2969,6 +2969,14 @@ function parsePixRedeemCdkeyPoolTextValue(value = '') {
     .filter(Boolean);
 }
 
+function shouldPreserveFocusedPixRedeemCdkeyPoolEdit() {
+  return Boolean(
+    inputPixRedeemCdkeyPool
+    && typeof document !== 'undefined'
+    && document.activeElement === inputPixRedeemCdkeyPool
+  );
+}
+
 function normalizePixRedeemCdkeyUsageValue(value = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
@@ -21313,7 +21321,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       ) {
         syncPixRedeemAfterModeControls(message.payload.pixRedeemContinueAfterRedeem === true ? false : true);
       }
-      if (message.payload.pixRedeemCdkeyPoolText !== undefined && inputPixRedeemCdkeyPool) {
+      if (
+        message.payload.pixRedeemCdkeyPoolText !== undefined
+        && inputPixRedeemCdkeyPool
+        && !shouldPreserveFocusedPixRedeemCdkeyPoolEdit()
+      ) {
         inputPixRedeemCdkeyPool.value = normalizePixRedeemCdkeyPoolTextValue(message.payload.pixRedeemCdkeyPoolText);
       }
       if (
