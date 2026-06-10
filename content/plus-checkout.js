@@ -227,6 +227,28 @@ function hasHostedOpenAiVerificationPopup() {
   return Boolean(document.getElementById('ci-ciBasic-0'));
 }
 
+function getHostedOpenAiCompletionMessageState() {
+  const messageRoot = document.querySelector('.FullPageMessage');
+  if (!messageRoot) {
+    return {
+      detected: false,
+      title: '',
+      detail: '',
+    };
+  }
+  const titleNode = messageRoot.querySelector('h1, h2, [role="heading"]');
+  const detailNode = messageRoot.querySelector('.FullPageMessage-Message-Detail, p');
+  const title = normalizeText(titleNode?.textContent || '');
+  const detail = normalizeText(detailNode?.textContent || '');
+  const combined = `${title} ${detail}`.trim();
+  const detected = /(?:您已完成|已完成付款|结账会话已超时|you're all set|you(?:'re|’re)\s+all\s+done\s+here|you(?:'ve|’ve)\s+either\s+completed\s+your\s+payment\s+or\s+this\s+checkout\s+session\s+has\s+timed\s+out|payment is complete|checkout session has expired|checkout session has timed out|completed)/i.test(combined);
+  return {
+    detected,
+    title,
+    detail,
+  };
+}
+
 function fillHostedOpenAiInputById(id, value) {
   const input = document.getElementById(String(id || '').trim());
   if (!input) {
@@ -3093,6 +3115,7 @@ async function inspectPlusCheckoutState(options = {}) {
   const hostedCardDeclinedError = getHostedOpenAiCardDeclinedState();
   const hostedCardFallback = getHostedOpenAiCardFallbackState();
   const customCheckoutError = getCheckoutGenericErrorState();
+  const completionMessage = getHostedOpenAiCompletionMessageState();
   const state = {
     url: location.href,
     readyState: document.readyState,
@@ -3120,6 +3143,9 @@ async function inspectPlusCheckoutState(options = {}) {
     hostedCardFallback: hostedCardFallback.fallback,
     hostedCardFallbackReason: hostedCardFallback.reason,
     hostedCardFallbackReasons: hostedCardFallback.reasons,
+    hostedCompletionDetected: completionMessage.detected,
+    hostedCompletionTitle: completionMessage.title,
+    hostedCompletionDetail: completionMessage.detail,
     hostedPaypalDisabledSignals: hostedCardFallback.paypalDisabledSignals,
     hostedCardAccordionSelected: hostedCardFallback.cardAccordionSelected,
     addressFieldValues: {

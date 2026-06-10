@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GuJumpgate  V0.1.10</title>
+  <title>GuJumpgate  V0.2.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -25,7 +25,7 @@
       <div class="header-version-block">
         <div class="header-version-main">
           <button id="extension-update-status" class="header-version-title header-version-link" type="button"
-          aria-label="打开 GitHub Releases 页面" title="打开 GitHub Releases 页面">GuJumpgate  V0.1.10</button>
+          aria-label="打开 GitHub Releases 页面" title="打开 GitHub Releases 页面">GuJumpgate  V0.2.0</button>
           <button id="btn-release-log" class="header-link-btn" type="button" hidden>更新日志</button>
         </div>
         <span id="extension-version-meta" class="header-version-meta" hidden></span>
@@ -903,21 +903,6 @@
           </div>
         </div>
       </div>
-      <div class="data-row module-divider-start" id="row-oauth-display">
-        <span class="data-label">OAuth</span>
-        <span id="display-oauth-url" class="data-value mono truncate">等待中...</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">登录验证码</span>
-        <span id="display-oauth-login-code" class="data-value mono">未获取</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">回调</span>
-        <div class="data-inline data-value-actions">
-          <span id="display-localhost-url" class="data-value data-value-fill mono truncate">等待中...</span>
-          <button id="btn-save-settings" class="btn btn-outline btn-sm data-inline-btn" type="button">保存</button>
-        </div>
-      </div>
     </div>
     <div id="cloudflare-temp-email-section" class="data-card hotmail-card" style="display:none;">
       <div class="section-mini-header">
@@ -1285,6 +1270,149 @@
           </select>
         </div>
         <div id="hotmail-accounts-list" class="hotmail-accounts-list"></div>
+      </div>
+    </div>
+    <div id="ppboom-section" class="data-card hotmail-card">
+      <div class="section-mini-header">
+        <div class="section-mini-copy">
+          <span class="section-label">PP爆破模式</span>
+          <span id="display-ppboom-status" class="data-value">默认关闭</span>
+        </div>
+        <div class="section-mini-actions">
+          <button id="btn-save-ppboom-settings" class="btn btn-outline btn-xs" type="button">保存</button>
+          <button id="btn-clear-ppboom-settings" class="btn btn-ghost btn-xs" type="button">清除</button>
+        </div>
+      </div>
+      <div class="data-row data-check-row" id="row-ppboom-enabled">
+        <span class="data-label">启用爆破</span>
+        <div class="data-inline setting-pair">
+          <div class="setting-group setting-group-primary">
+            <label class="toggle-switch" for="input-ppboom-enabled" title="开启后，步骤 6 改为通过本地 PPBoom helper 串行爆破创建 PayPal 订阅入口">
+              <input type="checkbox" id="input-ppboom-enabled" />
+              <span class="toggle-switch-track" aria-hidden="true">
+                <span class="toggle-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+          <span class="setting-caption">请先手动运行 start-ppboom.bat / start-ppboom.command</span>
+        </div>
+      </div>
+      <div id="ppboom-settings-shell" hidden>
+        <div class="data-row">
+          <span class="data-label">PPBoom 浏览器</span>
+          <div class="data-inline data-inline-stack">
+            <select id="select-ppboom-browser-backend" class="data-select">
+              <option value="local" selected>当前浏览器</option>
+              <option value="adspower">AdsPower</option>
+              <option value="roxybrowser">RoxyBrowser</option>
+            </select>
+            <span class="setting-caption">RoxyBrowser 当前仅支持 Chrome 内核窗口（chromedriver.exe）</span>
+          </div>
+        </div>
+        <div class="data-row" id="row-ppboom-adspower-api-base">
+          <span class="data-label">AdsPower API</span>
+          <input type="text" id="input-ppboom-adspower-api-base" class="data-input mono" placeholder="http://127.0.0.1:50325" />
+        </div>
+        <div class="data-row" id="row-ppboom-adspower-api-key">
+          <span class="data-label">AdsPower API Key <span class="setting-caption">可选</span></span>
+          <input type="password" id="input-ppboom-adspower-api-key" class="data-input mono" placeholder="可留空" autocomplete="off" />
+        </div>
+        <div class="data-row" id="row-ppboom-roxybrowser-api-base">
+          <span class="data-label">RoxyBrowser API</span>
+          <input type="text" id="input-ppboom-roxybrowser-api-base" class="data-input mono" placeholder="http://127.0.0.1:50000" />
+        </div>
+        <div class="data-row" id="row-ppboom-roxybrowser-api-key">
+          <span class="data-label">RoxyBrowser API Key <span class="setting-caption">必填</span></span>
+          <input type="password" id="input-ppboom-roxybrowser-api-key" class="data-input mono" placeholder="请输入 RoxyBrowser API Key" autocomplete="off" />
+        </div>
+        <div class="data-row" id="row-ppboom-adspower-profile-id">
+          <span class="data-label">AdsPower窗口ID</span>
+          <div class="data-inline data-inline-stack ppboom-window-id-field">
+            <input type="text" id="input-ppboom-adspower-profile-id" class="data-input mono" placeholder="粘贴 AdsPower 窗口编号" />
+            <span class="setting-caption">AdsPower-环境管理-编号/ID-复制窗口的编号</span>
+          </div>
+        </div>
+        <div class="data-row" id="row-ppboom-roxybrowser-profile-id">
+          <span class="data-label">RoxyBrowser窗口ID</span>
+          <div class="data-inline data-inline-stack ppboom-window-id-field">
+            <input type="text" id="input-ppboom-roxybrowser-profile-id" class="data-input mono" placeholder="粘贴 RoxyBrowser 窗口ID" />
+            <span class="setting-caption">RoxyBrowser-全部窗口-右键窗口-窗口操作-复制窗口ID</span>
+          </div>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Stripe Publishable Key</span>
+          <input type="text" id="input-ppboom-stripe-publishable-key" class="data-input mono" placeholder="留空使用 helper 默认值" />
+        </div>
+        <div class="data-row">
+          <span class="data-label">Device ID</span>
+          <input type="text" id="input-ppboom-device-id" class="data-input mono" placeholder="留空自动生成" />
+        </div>
+        <div class="data-row">
+          <span class="data-label">User Agent</span>
+          <input type="text" id="input-ppboom-user-agent" class="data-input mono" placeholder="留空使用 helper 默认值" />
+        </div>
+        <div class="data-row">
+          <span class="data-label">连续串行次数</span>
+          <div class="data-inline">
+            <input type="number" id="input-ppboom-max-attempts" class="data-input auto-delay-input" value="10" min="1" max="20" step="1" />
+            <span class="setting-caption">默认 10，最高 20</span>
+          </div>
+        </div>
+        <div class="data-row">
+          <span class="data-label">支付页语言</span>
+          <select id="select-ppboom-payment-locale" class="data-select">
+            <option value="en" selected>英文</option>
+            <option value="zh-CN">简体中文</option>
+            <option value="zh-TW">繁体中文</option>
+            <option value="ja">日文</option>
+            <option value="ko">韩文</option>
+            <option value="de">德文</option>
+            <option value="fr">法文</option>
+            <option value="es">西班牙文</option>
+            <option value="id">印尼文</option>
+            <option value="pt-BR">葡萄牙文</option>
+          </select>
+        </div>
+        <div class="data-row">
+          <span class="data-label">重建 Checkout 次数</span>
+          <div class="data-inline">
+            <input type="number" id="input-ppboom-checkout-rebuild-max-attempts" class="data-input auto-delay-input" value="3" min="1" max="10" step="1" />
+            <span class="setting-caption">默认 3，最高 10</span>
+          </div>
+        </div>
+        <div class="data-row">
+          <span class="data-label">JP 代理</span>
+          <input type="text" id="input-ppboom-default-proxy" class="data-input mono" placeholder="http://127.0.0.1:7890" />
+        </div>
+        <div class="data-row" id="row-ppboom-provider-proxy">
+          <span class="data-label">US 代理（手机号注册可选）</span>
+          <input type="text" id="input-ppboom-provider-proxy" class="data-input mono" placeholder="留空则全链路使用 JP 代理" />
+        </div>
+        <div class="data-row">
+          <span class="data-label">运行状态</span>
+          <div class="data-inline data-value-actions">
+            <span id="display-ppboom-runtime" class="data-value data-value-fill mono">未运行</span>
+            <button id="btn-ppboom-pause" class="btn btn-outline btn-sm data-inline-btn" type="button" disabled>暂停</button>
+            <button id="btn-ppboom-resume" class="btn btn-outline btn-sm data-inline-btn" type="button" disabled>继续</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="oauth-status-section" class="data-card">
+      <div class="data-row module-divider-start" id="row-oauth-display">
+        <span class="data-label">OAuth</span>
+        <span id="display-oauth-url" class="data-value mono truncate">等待中...</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">登录验证码</span>
+        <span id="display-oauth-login-code" class="data-value mono">未获取</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">回调</span>
+        <div class="data-inline data-value-actions">
+          <span id="display-localhost-url" class="data-value data-value-fill mono truncate">等待中...</span>
+          <button id="btn-save-settings" class="btn btn-outline btn-sm data-inline-btn" type="button">保存</button>
+        </div>
       </div>
     </div>
     <div id="mail2925-section" class="data-card hotmail-card" style="display:none;">
@@ -2113,9 +2241,9 @@
                   </div>
                 </div>
                 <div id="row-whatsapp-page-restart-enabled" class="hero-sms-settings-cell" style="display:none;">
-                  <span class="hero-sms-settings-caption">WA 重开</span>
+                  <span class="hero-sms-settings-caption">WA自动重试</span>
                   <div class="setting-controls hero-sms-toggle-controls">
-                    <label class="toggle-switch" for="input-whatsapp-page-restart-enabled" title="开启后，步骤 9 的手机验证码页正文命中 WhatsApp 时自动释放号码并回到 open-chatgpt 重开 OAuth">
+                    <label class="toggle-switch" for="input-whatsapp-page-restart-enabled" title="开启后，add-phone 页提示短信切换为 WhatsApp 时自动刷新 add-phone、释放当前号码并重新取号重试">
                       <input type="checkbox" id="input-whatsapp-page-restart-enabled" checked />
                       <span class="toggle-switch-track" aria-hidden="true">
                         <span class="toggle-switch-thumb"></span>
@@ -2124,9 +2252,9 @@
                   </div>
                 </div>
                 <div id="row-whatsapp-page-restart-max-attempts" class="hero-sms-settings-cell" style="display:none;">
-                  <span class="hero-sms-settings-caption">WA 重开次数</span>
+                  <span class="hero-sms-settings-caption">WA重试次数</span>
                   <div class="setting-controls">
-                    <input type="number" id="input-whatsapp-page-restart-max-attempts" class="data-input auto-delay-input" value="3" min="1" max="20" step="1" title="手机验证码页正文命中 WhatsApp 后，最多整链路重开多少次" />
+                    <input type="number" id="input-whatsapp-page-restart-max-attempts" class="data-input auto-delay-input" value="5" min="1" max="20" step="1" title="add-phone 页提示短信切换为 WhatsApp 后，最多自动刷新并重新取号多少次" />
                     <span class="data-unit">次</span>
                   </div>
                 </div>

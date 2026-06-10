@@ -16,5 +16,12 @@ __pycache__/
 .worktrees/
 /release-artifacts/
 /tests/
+/python/
+/data/ppboom-start.log
+/.audit_tmp/
+/.cmp_upstream/
+/.codex-backups/
+/.tmp_*/
+/backup/
 # Local exported runtime settings
 /config.json

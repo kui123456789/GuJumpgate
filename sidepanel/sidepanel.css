@@ -820,6 +820,102 @@ header {
   min-width: 0;
 }
 
+#ppboom-section {
+  --ppboom-label-width: 154px;
+}
+
+#ppboom-section .data-row {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+#ppboom-settings-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+#ppboom-section .data-row > .data-label {
+  flex: 0 0 var(--ppboom-label-width);
+  width: var(--ppboom-label-width);
+  padding-top: 8px;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+#ppboom-section .data-row > .data-input,
+#ppboom-section .data-row > .data-select,
+#ppboom-section .data-row > .data-inline {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+#ppboom-section .data-row > .data-input,
+#ppboom-section .data-row > .data-select {
+  width: auto;
+}
+
+#ppboom-section .data-label .setting-caption {
+  margin-left: 4px;
+  min-width: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  text-align: left;
+}
+
+#ppboom-section .data-inline-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+#ppboom-section .data-inline-stack .setting-caption {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.ppboom-window-id-field .data-input {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+#row-ppboom-enabled > .data-label {
+  padding-top: 2px;
+}
+
+#row-ppboom-enabled .setting-caption,
+#ppboom-section .data-inline > .setting-caption {
+  min-width: 0;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+
+#ppboom-section .data-value-actions .data-value-fill {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 340px) {
+  #ppboom-section {
+    --ppboom-label-width: 100%;
+  }
+
+  #ppboom-section .data-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+  }
+
+  #ppboom-section .data-row > .data-label {
+    padding-top: 0;
+  }
+}
+
 .current-session-export-inline {
   flex-wrap: wrap;
   justify-content: space-between;

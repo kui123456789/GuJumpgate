@@ -11,13 +11,14 @@
 5. 确认 `docs/images` 中的 README 图片可以正常显示
 6. 运行测试或至少完成关键功能自测
 7. 检查 `git diff`，确认没有把本地临时文件一起带上
+8. Windows 发布包里的 `*.bat` 启动脚本要保持 `CRLF` 换行；如果直接从工作目录打包，不要把被编辑器改成 `LF` 的批处理文件带进发布包
 
 ## 当前版本建议
 
-- 当前待发布版本：`v0.1.10`
-- 当前扩展版本号：`0.1.10`
-- Release 文案文件：`docs/releases/v0.1.10.md`
-- GitHub Release 正文可直接复制 `docs/releases/v0.1.10.md`
+- 当前待发布版本：`v0.2.0`
+- 当前扩展版本号：`0.2.0`
+- Release 文案文件：`docs/releases/v0.2.0.md`
+- GitHub Release 正文可直接复制 `docs/releases/v0.2.0.md`
 
 ## 首次发布
 
@@ -43,11 +44,11 @@ git push -u origin main
 
 ```powershell
 git status
-git add manifest.json sidepanel/sidepanel.html sidepanel/update-service.js sidepanel/sidepanel.js docs/releases/v0.1.10.md RELEASING.md
-git commit -m "Prepare v0.1.10 release"
-git tag -a v0.1.10 -m "GuJumpgate v0.1.10"
+git add manifest.json sidepanel/sidepanel.html sidepanel/update-service.js sidepanel/sidepanel.js docs/releases/v0.2.0.md RELEASING.md
+git commit -m "Prepare v0.2.0 release"
+git tag -a v0.2.0 -m "GuJumpgate v0.2.0"
 git push origin main
-git push origin v0.1.10
+git push origin v0.2.0
 ```
 
 ## Release 说明建议

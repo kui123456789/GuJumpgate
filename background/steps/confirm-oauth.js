@@ -66,6 +66,8 @@
         return '';
       }
       if (pageState.verificationPage) return 'verification';
+      if (pageState.addPhonePage) return 'add_phone';
+      if (pageState.phoneVerificationPage) return 'phone_verification';
       if (pageState.addEmailPage) return 'add_email';
       if (pageState.retryPage) return 'retry';
       return '';
@@ -78,6 +80,10 @@
           return pageState?.displayedEmail
             ? `邮箱验证码页（${pageState.displayedEmail}）`
             : '邮箱验证码页';
+        case 'add_phone':
+          return '添加手机号页';
+        case 'phone_verification':
+          return '手机验证码页';
         case 'add_email':
           return '添加邮箱页';
         case 'retry':

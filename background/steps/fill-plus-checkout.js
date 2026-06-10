@@ -46,7 +46,7 @@
       id: PLUS_PAYMENT_METHOD_PAYPAL,
       label: 'PayPal',
       selectMessageType: 'PLUS_CHECKOUT_SELECT_PAYPAL',
-      redirectPattern: /paypal\./i,
+      redirectPattern: /paypal\.|pm-redirects\.stripe\.com/i,
     },
     [PLUS_PAYMENT_METHOD_GOPAY]: {
       id: PLUS_PAYMENT_METHOD_GOPAY,
@@ -1895,6 +1895,13 @@
       activeVisibleStep = getCheckoutBillingDisplayStep(state);
       if (isGpcHelperCheckout(state)) {
         await executeGpcHelperBilling(state);
+        return;
+      }
+      if (String(state?.plusCheckoutSource || '').trim() === 'ppboom-paypal-redirect') {
+        await addLog('步骤 7：已启用 PP爆破模式，PPBoom 已直接把当前标签页推进到 PayPal，跳过账单填写。', 'info');
+        await completeNodeFromBackground('plus-checkout-billing', {
+          skippedByPpBoom: true,
+        });
         return;
       }
       const paymentMethod = normalizePlusPaymentMethod(state?.plusPaymentMethod);
